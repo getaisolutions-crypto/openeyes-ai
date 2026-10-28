@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Loader2, MessageCircle, Send, Trash2, VolumeX } from 'lucide-react';
+import { Loader2, MessageCircle, Send, Trash2, VolumeX, X } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { Notice } from '../components/Notice';
 import { MicButton } from '../components/MicButton';
 import { ConfirmDialog } from '../components/Dialog';
+import { PhotoAttachment } from '../components/PhotoAttachment';
 import { useServices } from '../services/ServicesContext';
 import { useSettings } from '../hooks/useSettings';
 import { useAnnouncer } from '../hooks/useAnnouncer';
+import { aiErrorMessage } from '../hooks/useAIRequest';
 import { SPEECH_ERROR_MESSAGES, useSpeechRecognition } from '../hooks/useSpeechRecognition';
-import { ProviderUnavailableError, type ChatMessage } from '../types/ai';
+import { parseRememberRequest, selectRelevantMemories } from '../services/ai/conversationContext';
+import type { ChatMessage } from '../types/ai';
+import type { CapturedImage } from '../types/camera';
 import { createId } from '../utils/id';
 import { LIMITS, validateRequiredText } from '../utils/validation';
 import { STORAGE_KEYS, readJSON, removeKey, writeJSON } from '../utils/storage';
@@ -23,6 +27,9 @@ function isChatMessage(value: unknown): value is ChatMessage {
   );
 }
 
+/** Longer replies are not spoken automatically; the user can still read them or use their screen reader. */
+const AUTO_SPEAK_MAX_CHARS = 300;
+
 function loadConversation(enabled: boolean): ChatMessage[] {
   if (!enabled) return [];
   const raw = readJSON<unknown>(STORAGE_KEYS.conversation, []);
@@ -30,7 +37,8 @@ function loadConversation(enabled: boolean): ChatMessage[] {
 }
 
 export default function AssistantPage() {
-  const { ai, voice } = useServices();
+  const { ai, voice, memory } = useServices();
+  const aiStatus = ai.getStatus();
   const { settings } = useSettings();
   const { announce } = useAnnouncer();
   const location = useLocation();
@@ -42,6 +50,9 @@ export default function AssistantPage() {
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [photo, setPhoto] = useState<CapturedImage | null>(null);
+  const [pendingMemory, setPendingMemory] = useState<string | null>(null);
+  const [memoryNotice, setMemoryNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const listEndRef = useRef<HTMLLIElement>(null);
 
@@ -65,38 +76,52 @@ export default function AssistantPage() {
       }
       setInputError(null);
       setError(null);
+      setMemoryNotice(null);
+
+      const note = parseRememberRequest(result.value);
+      if (note) {
+        setDraft('');
+        setPendingMemory(note);
+        announce('OpenEyes needs your confirmation before saving this memory.');
+        return;
+      }
+
       const userMessage: ChatMessage = {
         id: createId(),
         role: 'user',
         content: result.value,
         createdAt: new Date().toISOString(),
         inputMode,
+        photoAttached: Boolean(photo),
       };
       const history = [...messages, userMessage];
       setMessages(history);
       setDraft('');
       setPending(true);
-      announce('Message sent. Waiting for OpenEyes.');
+      announce(photo ? 'Message and photo sent. Waiting for OpenEyes.' : 'Message sent. Waiting for OpenEyes.');
 
       const controller = new AbortController();
       abortRef.current = controller;
       try {
+        const saved = await memory.list().catch(() => []);
+        const memories = selectRelevantMemories(saved, result.value).map((m) => m.text);
         const response = await ai.sendMessage({
           messages: history,
           responseLength: settings.responseLength,
+          image: photo ?? undefined,
+          memories,
           signal: controller.signal,
         });
-        setMessages((prev) => [...prev, response.message]);
-        announce(`OpenEyes said: ${response.message.content}`);
-        if (settings.voiceOutput && !settings.quietMode) {
-          voice.speak(response.message.content, { rate: settings.speechRate });
+        if (controller.signal.aborted) return;
+        const reply: ChatMessage = { ...response.message, memoriesShared: memories.length || undefined };
+        setMessages((prev) => [...prev, reply]);
+        announce(`OpenEyes said: ${reply.content}`);
+        if (settings.voiceOutput && !settings.quietMode && reply.content.length <= AUTO_SPEAK_MAX_CHARS) {
+          voice.speak(reply.content, { rate: settings.speechRate });
         }
       } catch (err) {
         if (controller.signal.aborted) return;
-        const message =
-          err instanceof ProviderUnavailableError
-            ? err.message
-            : 'Something went wrong and OpenEyes could not answer. Please try again.';
+        const message = aiErrorMessage(err);
         setError(message);
         announce(message, 'assertive');
       } finally {
@@ -104,8 +129,29 @@ export default function AssistantPage() {
         setPending(false);
       }
     },
-    [ai, announce, messages, settings, voice],
+    [ai, announce, memory, messages, photo, settings, voice],
   );
+
+  const cancelRequest = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setPending(false);
+    announce('Request cancelled.');
+  };
+
+  const saveMemory = async () => {
+    const text = pendingMemory;
+    setPendingMemory(null);
+    if (!text) return;
+    try {
+      await memory.create({ text });
+      setMemoryNotice({ ok: true, text: `Saved to My Memories: "${text}"` });
+      announce('Memory saved.');
+    } catch {
+      setMemoryNotice({ ok: false, text: 'The memory could not be saved. Please try again.' });
+      announce('The memory could not be saved.', 'assertive');
+    }
+  };
 
   const speech = useSpeechRecognition({ onFinal: (text) => void send(text, 'voice') });
 
@@ -135,6 +181,8 @@ export default function AssistantPage() {
     abortRef.current?.abort();
     setMessages([]);
     setError(null);
+    setMemoryNotice(null);
+    setPending(false);
     setConfirmClear(false);
     announce('Conversation cleared.');
   };
@@ -147,10 +195,20 @@ export default function AssistantPage() {
         description="Ask a question by voice or by typing."
       />
 
-      <Notice variant="warning" title="AI answers not available yet">
-        OpenEyes is not yet connected to Meta AI, so it cannot reply. Your messages stay on this device. Voice input and
-        the controls on this screen work today.
-      </Notice>
+      {aiStatus.available ? (
+        <Notice variant="info" title="About answers">
+          Answers come from Meta AI (Muse Spark) through the OpenEyes server and can be wrong. OpenEyes only sees your
+          surroundings when you attach a photo. Say &ldquo;Remember that...&rdquo; to save a note to My Memories after
+          you confirm it.
+        </Notice>
+      ) : (
+        <Notice variant="warning" title="AI answers not available yet">
+          OpenEyes is not connected to Meta AI in this version of the app, so it cannot reply. Your messages stay on this
+          device. Voice input and the controls on this screen work today.
+        </Notice>
+      )}
+
+      {aiStatus.available && <PhotoAttachment photo={photo} onPhotoChange={setPhoto} />}
 
       <section aria-label="Voice input" className="card mt-4 flex flex-col items-center gap-4 p-6 text-center">
         {speech.supported ? (
@@ -222,7 +280,13 @@ export default function AssistantPage() {
                     <span className="sr-only"> said</span>
                   </p>
                   <p className="mt-1 whitespace-pre-wrap break-words text-lg">{m.content}</p>
-                  <p className="mt-1 text-xs opacity-70">{formatDateTime(m.createdAt)}</p>
+                  <p className="mt-1 text-xs opacity-70">
+                    {formatDateTime(m.createdAt)}
+                    {m.photoAttached ? ' · with photo' : ''}
+                    {m.memoriesShared
+                      ? ` · ${m.memoriesShared} saved ${m.memoriesShared === 1 ? 'memory' : 'memories'} shared as background`
+                      : ''}
+                  </p>
                 </div>
               </li>
             ))}
@@ -231,8 +295,20 @@ export default function AssistantPage() {
         )}
 
         {pending && (
-          <div role="status" className="mt-3 flex items-center gap-2 text-muted">
-            <Loader2 aria-hidden="true" className="h-5 w-5 motion-safe:animate-spin" /> Waiting for OpenEyes
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <p role="status" className="flex items-center gap-2 text-muted">
+              <Loader2 aria-hidden="true" className="h-5 w-5 motion-safe:animate-spin" /> Waiting for OpenEyes
+            </p>
+            <button type="button" className="btn-secondary" onClick={cancelRequest}>
+              <X aria-hidden="true" className="h-5 w-5" /> Cancel
+            </button>
+          </div>
+        )}
+        {memoryNotice && (
+          <div className="mt-3">
+            <Notice variant={memoryNotice.ok ? 'success' : 'error'} title={memoryNotice.ok ? 'Memory saved' : 'Not saved'}>
+              {memoryNotice.text}
+            </Notice>
           </div>
         )}
         {error && (
@@ -285,6 +361,18 @@ export default function AssistantPage() {
         destructive
         onConfirm={clearConversation}
         onCancel={() => setConfirmClear(false)}
+      />
+
+      <ConfirmDialog
+        open={pendingMemory !== null}
+        title="Save this memory?"
+        message={`"${pendingMemory ?? ''}" will be saved in My Memories on this device. You can edit or delete it later.`}
+        confirmLabel="Save memory"
+        onConfirm={() => void saveMemory()}
+        onCancel={() => {
+          setPendingMemory(null);
+          announce('Memory not saved.');
+        }}
       />
     </>
   );

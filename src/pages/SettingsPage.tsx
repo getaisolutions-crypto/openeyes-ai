@@ -9,7 +9,8 @@ import { useSettings } from '../hooks/useSettings';
 import { useAnnouncer } from '../hooks/useAnnouncer';
 import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
 import { SPEECH_RATE } from '../services/settings/settingsStorage';
-import { PLANNED_META_MODELS } from '../services/ai/metaModels';
+import { META_MODELS } from '../services/ai/metaModels';
+import { MetaConnectionCheck } from '../components/MetaConnectionCheck';
 import { clearAllAppData } from '../utils/storage';
 import type { AssistanceMode, ProactiveFrequency, TextSize, Theme } from '../types/settings';
 import type { ResponseLength } from '../types/ai';
@@ -219,22 +220,33 @@ export default function SettingsPage() {
             off when you capture a photo or leave the screen.
           </p>
           <p>
+            <strong>Photos and AI:</strong> a photo leaves this device only when you press a button such as Describe,
+            Find, Read or Send with a photo attached. It is shrunk and sent to Meta AI through the OpenEyes server, and
+            OpenEyes does not store it there.
+          </p>
+          <p>
             <strong>Microphone:</strong> requested only when you start voice input, and used only while listening.
           </p>
           <p>To revoke access, open your browser&apos;s site settings or your phone&apos;s app permissions.</p>
         </div>
       </Section>
 
-      <Section title="Meta AI models" badge={<PlannedBadge />}>
+      <Section title="Meta AI models">
         <ul className="space-y-3 py-3">
-          {PLANNED_META_MODELS.map((m) => (
+          {META_MODELS.map((m) => (
             <li key={m.id}>
-              <p className="font-bold">{m.name}</p>
-              <p className="text-muted">{m.plannedUse}</p>
+              <p className="flex flex-wrap items-center gap-2 font-bold">
+                {m.name}
+                <PlannedBadge label={m.status === 'integrated' ? 'Via OpenEyes server' : 'Planned'} />
+              </p>
+              <p className="text-muted">{m.use}</p>
             </li>
           ))}
         </ul>
-        <p className="py-3 text-sm text-muted">None of these models are connected yet.</p>
+        <p className="py-3 text-sm text-muted">
+          Muse Spark answers only when the OpenEyes server has a Meta API key. The other models are not connected yet.
+        </p>
+        <MetaConnectionCheck />
       </Section>
 
       <button type="button" className="btn-secondary mt-6 w-full" onClick={() => setConfirmReset(true)}>

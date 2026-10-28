@@ -9,6 +9,8 @@ import {
   createUnavailableObjectDetectionProvider,
   createUnavailableVisionProvider,
 } from './ai/unavailableProviders';
+import { createMetaProviders } from './ai/metaProviders';
+import { createOpenEyesBackend, getBackendConfigFromEnv } from './ai/openEyesBackend';
 import { createBrowserCameraProvider } from './camera/browserCameraProvider';
 import { createMetaGlassesDevice } from './devices/metaGlassesDevice';
 import { createPhoneCameraDevice, createPhoneMicrophoneDevice } from './devices/phoneDevices';
@@ -31,11 +33,22 @@ export interface Services {
   };
 }
 
-export function createDefaultServices(): Services {
+export function createUnavailableAIServices(): Pick<Services, 'ai' | 'vision' | 'objectDetection'> {
   return {
     ai: createUnavailableAIProvider(),
     vision: createUnavailableVisionProvider(),
     objectDetection: createUnavailableObjectDetectionProvider(),
+  };
+}
+
+function createAIServices(): Pick<Services, 'ai' | 'vision' | 'objectDetection'> {
+  const config = getBackendConfigFromEnv();
+  return config ? createMetaProviders(createOpenEyesBackend(config)) : createUnavailableAIServices();
+}
+
+export function createDefaultServices(): Services {
+  return {
+    ...createAIServices(),
     voice: createWebSpeechVoiceProvider(),
     camera: createBrowserCameraProvider(),
     memory: createLocalMemoryProvider(),

@@ -13,5 +13,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // Full-page axe scans of lazy-loaded screens can exceed 5s when every test file runs in parallel.
+    testTimeout: 15000,
   },
 });

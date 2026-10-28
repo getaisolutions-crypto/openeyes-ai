@@ -45,7 +45,7 @@ export function CameraCapture({ subject, allowUpload = false, onImageChange }: C
 
   useEffect(() => {
     if (camera.status === 'live') announce('Camera is on. Point your phone and press Capture photo.');
-    if (camera.status === 'captured') announce('Photo captured. It is stored only on this device.');
+    if (camera.status === 'captured') announce('Photo ready. It stays on this device until you ask OpenEyes about it.');
     if (camera.status === 'error' && camera.errorKind) announce(CAMERA_ERRORS[camera.errorKind].title, 'assertive');
   }, [camera.status, camera.errorKind, announce]);
 
@@ -159,7 +159,10 @@ export function CameraCapture({ subject, allowUpload = false, onImageChange }: C
             </>
           )}
         </div>
-        <p className="text-sm text-muted">Source: Phone camera. Photos stay on this device and are never uploaded.</p>
+        <p className="text-sm text-muted">
+          Source: Phone camera. Photos stay on this device unless you press a button to ask OpenEyes about them. Then that
+          one photo is shrunk and sent securely to Meta AI through the OpenEyes server.
+        </p>
       </div>
     </section>
   );

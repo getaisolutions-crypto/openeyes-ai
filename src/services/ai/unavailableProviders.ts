@@ -7,8 +7,8 @@ import {
 } from '../../types/ai';
 
 /**
- * Phase 1 placeholders. They never produce responses; every call rejects with a clear explanation.
- * Phase 2 replaces them with providers that call a secure OpenEyes backend, which holds the Meta API credentials.
+ * Used when the app has no OpenEyes server address configured. They never produce responses;
+ * every call rejects with a clear explanation.
  */
 
 export const AI_NOT_CONNECTED =
@@ -26,6 +26,9 @@ export function createUnavailableAIProvider(): AIProvider {
     getStatus: () => unavailable(AI_NOT_CONNECTED),
     async sendMessage() {
       throw new ProviderUnavailableError('conversation', AI_NOT_CONNECTED);
+    },
+    async checkConnection() {
+      return { configured: false, message: AI_NOT_CONNECTED };
     },
   };
 }

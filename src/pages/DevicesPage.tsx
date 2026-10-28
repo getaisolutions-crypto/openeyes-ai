@@ -85,7 +85,10 @@ export default function DevicesPage() {
         <ul className="mt-3 list-disc space-y-2 pl-5 text-ink/90">
           <li>OpenEyes asks for the camera only when you press Turn on camera, and turns it off when you leave the screen.</li>
           <li>The microphone is used only while you are using voice input.</li>
-          <li>Photos are never uploaded in this version. They stay on this device.</li>
+          <li>
+            Photos stay on this device. A photo is sent to Meta AI through the OpenEyes server only when you press a
+            button such as Describe, Find or Read, and the camera is never streamed.
+          </li>
           <li>You can change or revoke permissions at any time in your browser or phone settings.</li>
         </ul>
       </section>

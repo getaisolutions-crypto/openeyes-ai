@@ -1,6 +1,6 @@
 import type { CapturedImage } from './camera';
 
-/** Meta models OpenEyes plans to use. Inputs/outputs must be verified against official Meta docs in Phase 2. */
+/** Meta model families OpenEyes uses or plans to use. The exact API model version is reported separately. */
 export type MetaModelId = 'muse-spark' | 'muse-spark-open' | 'sam-3.1' | 'muse-voice-transcribe';
 
 export type AICapability =
@@ -25,37 +25,59 @@ export interface ChatMessage {
   createdAt: string;
   /** How the user produced the message. */
   inputMode?: 'voice' | 'text';
+  /** True when a camera photo was sent with this question. */
+  photoAttached?: boolean;
+  /** Number of saved memories shared as background for this answer. */
+  memoriesShared?: number;
 }
 
 export interface ChatRequest {
   messages: ChatMessage[];
   responseLength: ResponseLength;
+  /** Current camera evidence for the latest question, if the user attached a photo. */
+  image?: CapturedImage;
+  /** User-approved saved memories relevant to the latest question. */
+  memories?: string[];
   signal?: AbortSignal;
 }
 
 export interface ChatResponse {
   message: ChatMessage;
   modelId: MetaModelId;
+  /** Exact model version reported by the API, e.g. muse-spark-1.3. */
+  modelVersion?: string;
 }
 
-/** Conversational assistant (planned: Muse Spark via a secure backend). */
+export interface ConnectionCheck {
+  /** True when the OpenEyes server is reachable and has a Meta API key. */
+  configured: boolean;
+  message: string;
+  modelVersion?: string;
+}
+
+/** Conversational assistant (Muse Spark through the OpenEyes server). */
 export interface AIProvider {
   readonly id: string;
   getStatus(): ProviderStatus;
   sendMessage(request: ChatRequest): Promise<ChatResponse>;
+  checkConnection(signal?: AbortSignal): Promise<ConnectionCheck>;
 }
 
 export interface SceneDescription {
   summary: string;
   modelId: MetaModelId;
+  modelVersion?: string;
 }
 
 export interface TextReadingResult {
+  /** Exactly the text the model read. Empty when nothing was readable. */
   text: string;
+  readable: boolean;
   modelId: MetaModelId;
+  modelVersion?: string;
 }
 
-/** Image understanding (planned: Muse Spark multimodal via a secure backend). */
+/** Image understanding (Muse Spark multimodal through the OpenEyes server). */
 export interface VisionProvider {
   readonly id: string;
   getStatus(): ProviderStatus;
@@ -79,17 +101,51 @@ export interface DetectedObject {
   maskUrl?: string;
 }
 
+export type ObjectVisibility = 'visible' | 'not-visible' | 'uncertain';
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
+
 export interface ObjectDetectionResult {
   query: string;
+  visibility: ObjectVisibility;
+  /** Where the item is relative to other things in the photo. Empty when not visible. */
+  positionDescription: string;
+  confidence: ConfidenceLevel;
+  suggestion: string;
+  /** Boxes/masks. Empty for Muse Spark; filled when SAM 3.1 segmentation is added. */
   matches: DetectedObject[];
   modelId: MetaModelId;
+  modelVersion?: string;
 }
 
-/** Object finding and segmentation (planned: SAM 3.1 via a secure backend). */
+/** Object finding (Muse Spark visual reasoning today; SAM 3.1 segmentation can implement this later). */
 export interface ObjectDetectionProvider {
   readonly id: string;
   getStatus(): ProviderStatus;
   findObject(query: string, image: CapturedImage, options?: { signal?: AbortSignal }): Promise<ObjectDetectionResult>;
+}
+
+export type AIErrorKind =
+  | 'not-configured'
+  | 'auth'
+  | 'rate-limited'
+  | 'timeout'
+  | 'network'
+  | 'unsupported-image'
+  | 'image-too-large'
+  | 'rejected'
+  | 'bad-response'
+  | 'server'
+  | 'cancelled';
+
+export class AIRequestError extends Error {
+  readonly kind: AIErrorKind;
+  readonly retryAfterSeconds?: number;
+  constructor(kind: AIErrorKind, message: string, retryAfterSeconds?: number) {
+    super(message);
+    this.name = 'AIRequestError';
+    this.kind = kind;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
 }
 
 export class ProviderUnavailableError extends Error {

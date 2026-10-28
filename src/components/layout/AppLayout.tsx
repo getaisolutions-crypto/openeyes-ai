@@ -51,7 +51,7 @@ export function AppLayout() {
               ))}
             </ul>
           </nav>
-          <p className="mt-auto px-3 text-sm text-muted">Version 0.1.0, Phase 1 foundation</p>
+          <p className="mt-auto px-3 text-sm text-muted">Version 0.2.0, Phase 2 Meta AI</p>
         </div>
       </aside>
 

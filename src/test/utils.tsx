@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import axe from 'axe-core';
 import { vi } from 'vitest';
 import { App } from '../App';
-import { createDefaultServices, type Services } from '../services/ServicesContext';
+import { createDefaultServices, createUnavailableAIServices, type Services } from '../services/ServicesContext';
 import type { CameraProvider } from '../types/camera';
 import type { VoiceProvider } from '../types/voice';
 
@@ -32,8 +32,15 @@ export function createFakeCamera(overrides: Partial<CameraProvider> = {}): Camer
   };
 }
 
+/** AI providers default to "unavailable" so no test ever reaches the real server. Override them to inject fakes. */
 export function createTestServices(overrides: Partial<Services> = {}): Services {
-  return { ...createDefaultServices(), voice: createFakeVoice(), camera: createFakeCamera(), ...overrides };
+  return {
+    ...createDefaultServices(),
+    ...createUnavailableAIServices(),
+    voice: createFakeVoice(),
+    camera: createFakeCamera(),
+    ...overrides,
+  };
 }
 
 export function renderApp(route = '/', services: Services = createTestServices()) {

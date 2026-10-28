@@ -19,7 +19,7 @@ function readDimensions(url: string): Promise<{ width: number; height: number }>
   });
 }
 
-/** Turns a user-selected file into a local preview. The file is never uploaded anywhere. */
+/** Turns a user-selected file into a local preview. Nothing is sent until the user asks an AI feature to use it. */
 export async function imageFromFile(file: File): Promise<CapturedImage> {
   if (!ALLOWED_TYPES.includes(file.type)) {
     throw new ImageUploadError('Please choose a photo file such as JPEG, PNG or WebP.');
