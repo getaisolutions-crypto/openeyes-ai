@@ -1,5 +1,82 @@
 # OpenEyes AI - Development Log
 
+## 2026-10-28 - Phase 3: Live Explore and interactive voice companion (v0.3.0)
+
+### Implemented
+
+- **Live Explore** on the Explore screen: Start, Pause, Resume, Describe now, Stop and Cancel request; text camera badge;
+  spoken start and stop confirmations; one-time consent dialog explaining data use; camera permission requested on
+  Start; permission denial handled; every camera track stopped on stop, session limit, leaving the screen or closing the
+  page. Single photo mode kept unchanged and paused while Live Explore uses the camera.
+- **Modes**: Ask only (default), Smart Explore (speaks only on noticeable change or a new person, door, stairs, sign,
+  vehicle, etc.), Continuous (skips near-identical repeats). Defaults set in Settings > Live Explore.
+- **Periodic frames**: 8 / 12 / 20 / 30 s (minimum 8 s), resized and compressed with the existing image preparation,
+  sent through the existing `openeyes-ai` function with brief descriptions; never overlapping; nothing sent while paused;
+  rate-limit backoff (server value or 60 s); stop after 3 consecutive network/timeout failures; stop at once on setup or
+  sign-in errors; session limit 5 / 10 / 15 minutes and 60 frames.
+- **Description manager**: word-overlap similarity (threshold 0.5) to suppress repeats, and detection of new
+  attention words.
+- **Speech**: automatic spoken answers with browser device voices; pause, resume, stop, rate and **voice selection**
+  (new, also in Settings); stale speech callbacks guarded; session transcript with "Based on:" labels.
+- **Interruption**: the Talk to OpenEyes button stops speech, then listens; never listens while speaking; user
+  questions cancel automatic analysis and take priority. Tap-to-talk only, no true barge-in.
+- **Commands**: stop, pause, keep exploring, describe that again, explore what's around me, read that sign, find my
+  <item>, remember this (with confirmation), and free questions. Current questions use a fresh frame; past-tense
+  questions use the previous frame plus up to 3 earlier observations (labelled possibly out of date) and relevant
+  saved memories. Without a running session OpenEyes says so instead of answering.
+- **Safety copy**: not a mobility aid, no distances, directions relative to the camera, uncertainty stated.
+- **Server**: rate limit raised from 30 to 90 requests per 10 minutes per hashed IP (redeployed). No other change to
+  the Meta integration.
+- Version bumped to 0.3.0 (`package.json`, `package-lock.json`, sidebar version text).
+
+### Files created
+
+- `src/services/explore/liveExploreController.ts`, `descriptionManager.ts`, `exploreCommands.ts`
+- `src/hooks/useLiveExplore.ts`
+- `src/components/explore/LiveExplorePanel.tsx`, `LiveTranscript.tsx`, `LiveSpeechControls.tsx`
+- `src/components/VoiceSelect.tsx`
+- `src/__tests__/liveExplore.test.ts`, `src/__tests__/liveExploreScreen.test.tsx`
+
+### Files modified
+
+- `src/pages/ExplorePage.tsx`, `src/pages/SettingsPage.tsx`, `src/components/AIResult.tsx` (safety note)
+- `src/hooks/useSpeechSynthesis.ts`, `src/types/voice.ts`, `src/services/voice/webSpeechVoiceProvider.ts`
+- `src/types/settings.ts`, `src/services/settings/settingsStorage.ts`, `src/utils/storage.ts`, `src/test/utils.tsx`
+- `src/components/layout/AppLayout.tsx` (version text)
+- `supabase/functions/openeyes-ai/index.ts` (quota 90)
+- `package.json`, `package-lock.json`, `README.md`, `DEVELOPMENT_LOG.md`
+
+### Tests performed
+
+- `npm run typecheck`: no errors.
+- `npm test`: 148 passed in 11 files (106 existing unchanged + 42 new, all with fake timers, fake camera and mocked
+  Meta responses).
+- `npm run build`: success.
+
+### Known limitations
+
+- Browser SpeechSynthesis voices only (not neural); Chrome speech recognition may use Google's online service.
+- No true barge-in; the user taps the mic button to interrupt.
+- Live Explore stops when the page is hidden (screen lock, app switch), by design.
+- Smart Explore change detection is word-based and can miss small changes.
+- Directions are relative to the camera; no distance measurement; not a mobility aid.
+- Live Explore not yet verified end to end against Meta from this environment; the project owner reports real answers
+  on Android.
+- GitHub synchronization not verified: the project folder here is not connected to a Git repository.
+
+### Remaining real-device testing
+
+- TalkBack across the Live Explore flow (no double speech, focus order, badge changes)
+- Android Chrome speech recognition, device voice list loading, voice selection and rate
+- Frame timing, mobile data use and the 90-per-10-minutes allowance on real networks
+- Camera release on app switch, screen lock and page change
+- Muse Spark answer quality and latency on real scenes
+
+### Next steps (awaiting instructions)
+
+- Run the real-device checks above and record results here.
+- Phase 4 not started.
+
 ## 2026-10-29 - Phase 2: Meta AI visual intelligence (v0.2.0)
 
 ### Research (official sources only)
