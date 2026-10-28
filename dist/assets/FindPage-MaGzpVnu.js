@@ -1,4 +1,4 @@
-import{c as E,C as I,l as F,j as e,u as L,b as M,r as o,m as O,P as A,n as g,h as v,B as R,o as P}from"./index-CUlGjYkp.js";import{C as T}from"./CameraCapture-B96nA8OG.js";import{u as q,M as D,S as $}from"./useSpeechRecognition-CcgnLRS3.js";import{N as b}from"./Notice-BY8MheD4.js";import{S as B,a as _,A as G}from"./AIResult-DU8v15iO.js";import{u as H}from"./useAIRequest-ch0UnJl3.js";import"./camera-DeN4YLEB.js";import"./x-v-TfGncy.js";import"./trash-BACr3xq_.js";import"./square-DviZFgoR.js";import"./useSpeechSynthesis-CxOOtgGh.js";/**
+import{c as E,C as I,l as F,j as e,u as L,b as M,r as o,m as O,P as A,n as g,h as v,B as R,o as P}from"./index-CoXPpbp9.js";import{C as T}from"./CameraCapture-DCNo6srn.js";import{u as q,M as D,S as $}from"./useSpeechRecognition-nZK_1wWu.js";import{N as b}from"./Notice-BWplV_yZ.js";import{S as B,a as _,A as G}from"./AIResult-D8lzgpSw.js";import{u as H}from"./useAIRequest-BBvSuzUj.js";import"./camera-CnxtWLbd.js";import"./x-C_IHSgSg.js";import"./trash-D1930sVF.js";import"./square-BKvbsZmT.js";import"./useSpeechSynthesis-BUTOhDzs.js";/**
  * @license lucide-react v1.63.0 - ISC
  *
  * This source code is licensed under the ISC license.

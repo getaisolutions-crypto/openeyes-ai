@@ -1,4 +1,4 @@
-import{c as t,j as e,L as d,b as l}from"./index-CUlGjYkp.js";import{u}from"./useSpeechSynthesis-CxOOtgGh.js";import{X as m}from"./x-v-TfGncy.js";import{S as p}from"./square-DviZFgoR.js";/**
+import{c as t,j as e,L as d,b as l}from"./index-CoXPpbp9.js";import{u}from"./useSpeechSynthesis-BUTOhDzs.js";import{X as m}from"./x-C_IHSgSg.js";import{S as p}from"./square-BKvbsZmT.js";/**
  * @license lucide-react v1.63.0 - ISC
  *
  * This source code is licensed under the ISC license.

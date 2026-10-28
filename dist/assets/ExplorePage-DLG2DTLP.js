@@ -1,4 +1,4 @@
-import{c as y,u as b,a as j,b as f,r as c,j as e,P as k,k as w}from"./index-CUlGjYkp.js";import{C as v}from"./CameraCapture-B96nA8OG.js";import{N as l}from"./Notice-BY8MheD4.js";import{A as N,S,a as C}from"./AIResult-DU8v15iO.js";import{u as D}from"./useAIRequest-ch0UnJl3.js";import{f as E}from"./format-DnT4L6_Q.js";import"./camera-DeN4YLEB.js";import"./x-v-TfGncy.js";import"./trash-BACr3xq_.js";import"./useSpeechSynthesis-CxOOtgGh.js";import"./square-DviZFgoR.js";/**
+import{c as y,u as b,a as j,b as f,r as c,j as e,P as k,k as w}from"./index-CoXPpbp9.js";import{C as v}from"./CameraCapture-DCNo6srn.js";import{N as l}from"./Notice-BWplV_yZ.js";import{A as N,S,a as C}from"./AIResult-D8lzgpSw.js";import{u as D}from"./useAIRequest-BBvSuzUj.js";import{f as E}from"./format-DnT4L6_Q.js";import"./camera-CnxtWLbd.js";import"./x-C_IHSgSg.js";import"./trash-D1930sVF.js";import"./useSpeechSynthesis-BUTOhDzs.js";import"./square-BKvbsZmT.js";/**
  * @license lucide-react v1.63.0 - ISC
  *
  * This source code is licensed under the ISC license.
