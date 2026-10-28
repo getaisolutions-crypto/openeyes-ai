@@ -1,0 +1,174 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root,
+  [data-theme='dark'] {
+    --bg: 11 17 20;
+    --surface: 19 28 32;
+    --surface-2: 28 40 45;
+    --line: 51 68 74;
+    --ink: 238 243 244;
+    --muted: 163 179 184;
+    --primary: 45 212 191;
+    --primary-strong: 94 234 212;
+    --on-primary: 4 32 28;
+    --accent: 251 191 36;
+    --on-accent: 33 22 0;
+    --success: 74 222 128;
+    --warning: 251 191 36;
+    --danger: 248 113 113;
+    --focus: 251 191 36;
+    color-scheme: dark;
+  }
+
+  [data-theme='light'] {
+    --bg: 246 248 248;
+    --surface: 255 255 255;
+    --surface-2: 234 239 240;
+    --line: 196 207 210;
+    --ink: 11 17 20;
+    --muted: 71 85 89;
+    --primary: 15 118 110;
+    --primary-strong: 17 94 89;
+    --on-primary: 255 255 255;
+    --accent: 180 83 9;
+    --on-accent: 255 255 255;
+    --success: 21 128 61;
+    --warning: 161 98 7;
+    --danger: 185 28 28;
+    --focus: 180 83 9;
+    color-scheme: light;
+  }
+
+  [data-contrast='high'][data-theme='dark'] {
+    --bg: 0 0 0;
+    --surface: 0 0 0;
+    --surface-2: 20 20 20;
+    --line: 255 255 255;
+    --ink: 255 255 255;
+    --muted: 235 235 235;
+    --primary: 94 234 212;
+    --primary-strong: 153 246 228;
+    --on-primary: 0 0 0;
+    --accent: 255 230 0;
+    --on-accent: 0 0 0;
+    --success: 134 239 172;
+    --warning: 255 230 0;
+    --danger: 255 150 150;
+    --focus: 255 230 0;
+  }
+
+  [data-contrast='high'][data-theme='light'] {
+    --bg: 255 255 255;
+    --surface: 255 255 255;
+    --surface-2: 240 240 240;
+    --line: 0 0 0;
+    --ink: 0 0 0;
+    --muted: 20 20 20;
+    --primary: 0 77 71;
+    --primary-strong: 0 50 46;
+    --on-primary: 255 255 255;
+    --accent: 120 50 0;
+    --on-accent: 255 255 255;
+    --success: 0 90 30;
+    --warning: 110 60 0;
+    --danger: 150 0 0;
+    --focus: 0 0 200;
+  }
+
+  html {
+    font-size: 100%;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html[data-text-size='large'] {
+    font-size: 112.5%;
+  }
+  html[data-text-size='xlarge'] {
+    font-size: 125%;
+  }
+  html[data-text-size='xxlarge'] {
+    font-size: 150%;
+  }
+
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    line-height: 1.5;
+    min-height: 100dvh;
+  }
+
+  h1,
+  h2,
+  h3 {
+    line-height: 1.2;
+  }
+
+  :focus-visible {
+    outline: 3px solid rgb(var(--focus));
+    outline-offset: 3px;
+    border-radius: 0.5rem;
+  }
+
+  [data-contrast='high'] :focus-visible {
+    outline-width: 4px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  [data-reduce-motion='true'] *,
+  [data-reduce-motion='true'] *::before,
+  [data-reduce-motion='true'] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl2 border border-line bg-surface;
+  }
+
+  .btn {
+    @apply inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl px-5 py-3 font-bold
+      transition-[background-color,transform,border-color] duration-150 active:scale-[0.98]
+      disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
+  }
+  .btn-primary {
+    @apply btn bg-primary text-on-primary hover:bg-primary-strong;
+  }
+  .btn-secondary {
+    @apply btn border border-line bg-surface-2 text-ink hover:border-primary;
+  }
+  .btn-danger {
+    @apply btn border border-danger bg-transparent text-danger hover:bg-danger/10;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-ink hover:bg-surface-2;
+  }
+
+  .field {
+    @apply block min-h-[48px] w-full rounded-xl border border-line bg-surface-2 px-4 py-3 text-ink
+      placeholder:text-muted focus:border-primary;
+  }
+
+  .label {
+    @apply mb-2 block font-bold text-ink;
+  }
+
+  .sr-only-focusable:not(:focus) {
+    @apply sr-only;
+  }
+}
