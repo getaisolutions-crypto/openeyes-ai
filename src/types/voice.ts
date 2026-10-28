@@ -24,6 +24,8 @@ export interface SpeakOptions {
   lang?: string;
   /** Browser voice identifier chosen in Settings. Falls back to the default voice when missing. */
   voiceURI?: string;
+  /** Called when audio actually starts, used to measure playback delay. */
+  onStart?: () => void;
   onEnd?: () => void;
 }
 
@@ -33,11 +35,16 @@ export interface VoiceOption {
   lang: string;
 }
 
-/** Speech input and output. Browser implementation today; Muse Voice Transcribe planned for Phase 2. */
+/** Speech input and output. Browser Web Speech implementation today; see README for the Muse Voice Transcribe plan. */
 export interface VoiceProvider {
   readonly id: string;
   isRecognitionSupported(): boolean;
   isSynthesisSupported(): boolean;
+  /**
+   * Asks for microphone permission with echo cancellation and releases the microphone straight away.
+   * Rejects with a SpeechErrorKind.
+   */
+  requestMicrophone(): Promise<void>;
   startListening(handlers: ListeningHandlers, lang?: string): ListeningSession;
   speak(text: string, options: SpeakOptions): void;
   /** Voices installed on the device. May be empty until the browser has loaded them. */

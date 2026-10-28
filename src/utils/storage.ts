@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   contacts: `${STORAGE_PREFIX}contacts.v1`,
   conversation: `${STORAGE_PREFIX}conversation.v1`,
   liveExploreConsent: `${STORAGE_PREFIX}live-explore-consent.v1`,
+  voiceConversationConsent: `${STORAGE_PREFIX}voice-conversation-consent.v1`,
 } as const;
 
 export function readJSON<T>(key: string, fallback: T): T {

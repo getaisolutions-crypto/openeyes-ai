@@ -28,4 +28,12 @@ export interface Settings {
   exploreMode: ExploreMode;
   exploreIntervalSeconds: ExploreInterval;
   exploreSessionMinutes: ExploreSessionMinutes;
+  /** Voice conversation listens again by itself after each reply. Off means tap Talk for every turn. */
+  conversationHandsFree: boolean;
+  /** Experimental: only respond to speech that starts with "Hey OpenEyes". */
+  conversationWakePhrase: boolean;
+  /** Experimental: listen while OpenEyes is speaking so you can interrupt by voice. */
+  conversationBargeIn: boolean;
+  /** Shows timing figures for each voice turn. No words or audio are shown or stored. */
+  voiceDiagnostics: boolean;
 }

@@ -18,6 +18,10 @@ export const DEFAULT_SETTINGS: Settings = {
   exploreMode: 'ask',
   exploreIntervalSeconds: 8,
   exploreSessionMinutes: 10,
+  conversationHandsFree: true,
+  conversationWakePhrase: false,
+  conversationBargeIn: false,
+  voiceDiagnostics: false,
 };
 
 export const EXPLORE_INTERVALS: readonly ExploreInterval[] = [8, 12, 20, 30];
@@ -56,6 +60,10 @@ export function sanitizeSettings(raw: unknown): Settings {
     exploreMode: oneOf(s.exploreMode, ['ask', 'smart', 'continuous'] as const, d.exploreMode),
     exploreIntervalSeconds: oneOfNumber(s.exploreIntervalSeconds, EXPLORE_INTERVALS, d.exploreIntervalSeconds),
     exploreSessionMinutes: oneOfNumber(s.exploreSessionMinutes, EXPLORE_SESSION_MINUTES, d.exploreSessionMinutes),
+    conversationHandsFree: bool(s.conversationHandsFree, d.conversationHandsFree),
+    conversationWakePhrase: bool(s.conversationWakePhrase, d.conversationWakePhrase),
+    conversationBargeIn: bool(s.conversationBargeIn, d.conversationBargeIn),
+    voiceDiagnostics: bool(s.voiceDiagnostics, d.voiceDiagnostics),
   };
 }
 

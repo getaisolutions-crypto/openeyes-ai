@@ -131,6 +131,40 @@ export default function SettingsPage() {
         )}
       </Section>
 
+      <Section title="Voice conversation">
+        <div className="py-3">
+          <Notice variant="info" title="How the microphone is used">
+            The microphone is only used after you press Start Voice Conversation on the Explore screen, and it turns off when
+            you stop, leave the screen or switch apps. Your browser turns speech into text; OpenEyes never records or saves
+            audio. The recognized words are sent to Meta AI through the OpenEyes server to get a reply.
+          </Notice>
+        </div>
+        <Switch
+          label="Hands-free turns"
+          description="After each reply, listen again by itself. Turn off to tap Talk before every question."
+          checked={settings.conversationHandsFree}
+          onChange={(v) => set('conversationHandsFree', v, `Hands-free turns ${v ? 'on' : 'off'}.`)}
+        />
+        <Switch
+          label={'Wake phrase "Hey OpenEyes" (experimental)'}
+          description="Only answer when you start with Hey OpenEyes. Works only during a conversation you started, never in the background. Recognition may miss the phrase; the Talk button always works."
+          checked={settings.conversationWakePhrase}
+          onChange={(v) => set('conversationWakePhrase', v, `Wake phrase ${v ? 'on' : 'off'}.`)}
+        />
+        <Switch
+          label="Interrupt by voice (experimental)"
+          description="Keeps listening while OpenEyes speaks so you can talk over it. Works best with headphones; the speaker may be heard as you. The Talk button always interrupts."
+          checked={settings.conversationBargeIn}
+          onChange={(v) => set('conversationBargeIn', v, `Interrupt by voice ${v ? 'on' : 'off'}.`)}
+        />
+        <Switch
+          label="Show voice timing details"
+          description="For testing. Shows how long recognition, the reply and speech took. No words or audio are shown or kept."
+          checked={settings.voiceDiagnostics}
+          onChange={(v) => set('voiceDiagnostics', v, `Voice timing details ${v ? 'shown' : 'hidden'}.`)}
+        />
+      </Section>
+
       <Section title="Live Explore">
         <div className="py-3">
           <Notice variant="info" title="Camera and data use">

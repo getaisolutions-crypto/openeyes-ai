@@ -36,6 +36,20 @@ export function createWebSpeechVoiceProvider(): VoiceProvider {
     isRecognitionSupported: () => Boolean(getRecognitionConstructor()),
     isSynthesisSupported: () => Boolean(synth()) && typeof SpeechSynthesisUtterance !== 'undefined',
 
+    async requestMicrophone() {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) throw 'unsupported' as SpeechErrorKind;
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+      } catch (error) {
+        const name = error instanceof DOMException ? error.name : '';
+        throw (name === 'NotAllowedError' || name === 'SecurityError' ? 'permission-denied' : 'audio-capture') as SpeechErrorKind;
+      }
+      stream.getTracks().forEach((track) => track.stop());
+    },
+
     startListening(handlers: ListeningHandlers, lang = navigator.language || 'en-US'): ListeningSession {
       const Ctor = getRecognitionConstructor();
       if (!Ctor) {
@@ -75,7 +89,7 @@ export function createWebSpeechVoiceProvider(): VoiceProvider {
       };
     },
 
-    speak(text, { rate, lang, voiceURI, onEnd }) {
+    speak(text, { rate, lang, voiceURI, onStart, onEnd }) {
       const s = synth();
       if (!s) return;
       s.cancel();
@@ -86,6 +100,7 @@ export function createWebSpeechVoiceProvider(): VoiceProvider {
         utterance.voice = chosen;
         utterance.lang = chosen.lang;
       } else if (lang) utterance.lang = lang;
+      utterance.onstart = () => onStart?.();
       utterance.onend = () => onEnd?.();
       utterance.onerror = () => onEnd?.();
       s.speak(utterance);

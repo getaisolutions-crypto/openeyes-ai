@@ -6,7 +6,12 @@ OpenEyes AI is a voice-first, accessibility-first personal assistant designed to
 understand their surroundings, find objects, read text, remember important information and accomplish everyday tasks
 more independently. The long-term target is Android smartphones and compatible Meta AI glasses.
 
-> Status: **Phase 3 (v0.3.0): Live Explore and interactive voice companion implemented.** On top of Phase 2 (scene
+> Status: **Phase 4 (v0.4.0): voice conversation implemented and tested in automated tests; not yet verified on a real
+> Android phone.** Explore now has **Start Voice Conversation**: a foreground, back-and-forth spoken conversation that
+> listens again after each reply and ends when you say or tap stop. Natural (neural) voices are prepared but **not
+> connected**; the browser voice is still used. See [Voice conversation (Phase 4)](#voice-conversation-phase-4).
+>
+> Phase 3 (v0.3.0): Live Explore and interactive voice companion. On top of Phase 2 (scene
 > description, object finding, text reading and conversation through Meta's **Muse Spark** model), Explore now offers a
 > live camera session you can talk to. The Meta API key (`MODEL_API_KEY`) is configured on the server and the project
 > owner reports real answers on an Android phone; real-device testing of Live Explore is still in progress (see
@@ -179,6 +184,147 @@ LiveExplorePanel (UI, buttons, badge, transcript, speech controls, dialogs)
 - Camera release when switching apps, locking the screen and leaving the page
 - Answer quality and latency of Muse Spark on real scenes
 
+## Voice conversation (Phase 4)
+
+**Status:** built and covered by automated tests. **Not yet tested on a real Android phone**, so how well hands-free
+turns, the wake phrase and voice interruption work in practice is unknown.
+
+### Using it
+
+1. On Explore, tap **Start Voice Conversation**. The first time, a dialog explains how the microphone is used.
+2. The browser asks for microphone permission. OpenEyes says "Voice conversation started. Microphone on."
+3. Speak. OpenEyes answers aloud, then **listens again by itself** (hands-free turns, on by default).
+4. To end: say "stop conversation", "goodbye" or "that's all", or tap **Stop conversation**. Leaving the screen,
+   switching apps and the 15-minute limit also end it. A spoken message confirms the microphone is off.
+
+It works with or without Live Explore:
+
+- **With Live Explore running**, "What's in front of me?" sends a fresh frame. Follow-ups such as "What color is the
+  bottle?" include the last few exchanges as context, clearly labelled so earlier views are not presented as current.
+- **With the camera off**, questions are answered from the conversation only. The answer is labelled "Conversation only,
+  camera off", and Meta AI is told it cannot see anything, so it should not describe the surroundings. Say "start
+  exploring" to turn on the camera; the existing consent dialog still applies.
+
+The **Talk** button is always available. It stops speech, cancels an answer still being prepared and listens straight
+away. Typed questions also go through the conversation. All Live Explore commands (explore, what's on my left, describe
+the table, read the label, find my keys, keep exploring, pause, stop exploring, remember this) work by voice.
+
+### Settings (Settings > Voice conversation)
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| Hands-free turns | On | Listen again after each reply. Off means tap Talk for every question. |
+| Wake phrase "Hey OpenEyes" (experimental) | Off | Only respond to requests that start with "Hey OpenEyes", except for 8 seconds after a reply. Only works during a conversation you started. |
+| Interrupt by voice (experimental) | Off | Keep listening while OpenEyes speaks so you can talk over it. Works best with headphones. |
+| Show voice timing details | Off | Shows recognition, reply, speech start and end-to-end times for the last turn. No words or audio. |
+
+Speech rate, voice choice, "Speak assistant replies" and Quiet mode still apply. With spoken replies off, answers go to
+the screen reader and OpenEyes waits an estimated reading time before listening again.
+
+### Architecture
+
+- **Conversation engine** (`services/voice/voiceConversationEngine.ts`): owns the session. States are idle, starting,
+  listening, user-speaking, processing, assistant-speaking, interrupted, waiting (tap-to-talk), error and stopped.
+  Transitions are checked against a fixed table (`conversationStateMachine.ts`) and invalid ones are refused.
+- **One speaker owner:** while a conversation runs, all Live Explore speech goes through the engine, so only one
+  utterance plays at a time. A new utterance cancels the old one, and an id check stops a cancelled utterance from
+  restarting listening.
+- **Stale answers:** every turn has an id and an AbortController. Interrupting, typing, stopping or a newer turn aborts
+  the request (including the Live Explore task) and the old answer is never spoken.
+- **Camera and voice coordination:** user requests go through Live Explore's single-request queue, which cancels any
+  automatic description in progress. Automatic descriptions are only spoken while OpenEyes is idle (listening or waiting),
+  never while you are speaking or an answer is coming. They continue only if Smart Explore or Continuous mode is on.
+- **Listening loop:** Android Chrome's speech recognition stops after each phrase, so the engine restarts it. After 3
+  silent rounds (each one plays the Android tone) it switches to tap-to-talk and says so. After 2 recognition errors in a
+  row it says hands-free listening is unreliable and stays in tap-to-talk for the rest of the session.
+- **Short-term memory:** the last 8 messages are kept in memory only and cleared when the conversation or Live Explore
+  ends. Saved memories still need the existing confirmation dialog; nothing is saved automatically.
+- **Diagnostics:** per-turn timings only, no transcript.
+
+### Voice providers
+
+| Part | Provider in use | Notes |
+| --- | --- | --- |
+| Speech recognition | Browser Web Speech API | On Android Chrome this usually runs through Google's speech service. |
+| Speech output | Browser SpeechSynthesis | Default and fallback. |
+| Natural voice | **None connected** | `NeuralTTSProvider` interface (`types/tts.ts`) and player (`neuralSpeechPlayer.ts`) are ready. `Services.neuralTTS` is `null`. If a provider is added and fails, that sentence falls back to the browser voice. |
+
+The interface covers synthesis, playback, cancellation, voice listing, error kinds, an optional streaming method and
+configuration. Any provider must be called **through the OpenEyes server** so its key never reaches the browser.
+
+### Natural voice research (not connected)
+
+Meta does not offer a text-to-speech model; Meta's models page states that Muse Voice Transcribe does not synthesize
+speech. These are candidates. Prices are list prices reported in October 2026, some from secondary sources, so check
+the official pricing pages before choosing.
+
+| Provider | Quality and features | Streaming | Reported price | Docs |
+| --- | --- | --- | --- | --- |
+| Google Cloud Text-to-Speech | Standard, WaveNet, Neural2, Chirp 3 HD voices; SSML | Yes (Chirp 3 HD) | $4-$30 per 1M characters by voice type, free monthly tier | https://cloud.google.com/text-to-speech/pricing |
+| Microsoft Azure AI Speech | Neural and Neural HD voices, SSML, many languages | Yes | About $15-$16 per 1M characters for neural voices, free tier | https://azure.microsoft.com/pricing/details/cognitive-services/speech-services/ |
+| Amazon Polly | Standard, Neural, Generative, Long-Form | Yes | $4 / $16 / $30 / $100 per 1M characters | https://aws.amazon.com/polly/pricing/ |
+| OpenAI gpt-4o-mini-tts | Steerable speaking style, 2,000 input tokens per request | Yes | $0.60 per 1M input tokens plus $12 per 1M audio output tokens | https://developers.openai.com/api/docs/models/gpt-4o-mini-tts |
+| ElevenLabs | Very natural voices; Flash v2.5 about 75 ms model latency | Yes (HTTP and WebSocket) | About $40 per 1M characters on Flash v2.5 | https://elevenlabs.io/docs/overview/models |
+
+All of them need an API key held on the server, and they return audio (MP3, Opus or PCM) that every modern browser,
+including Android Chrome, can play. Streaming would need a server function that passes audio chunks through; the player
+currently plays a complete clip.
+
+### Meta Muse Voice Transcribe evaluation
+
+Source: https://dev.meta.ai/docs/speech-to-text (model `muse-voice-transcribe-1.0`).
+
+- **Realtime:** WebSocket `wss://api.meta.ai/v1/asr/realtime`. **The API key is sent inside the first message**, not a
+  header. Audio must be raw 16-bit mono PCM at 16 or 24 kHz, sent at real-time pace, with silence during pauses.
+  Endpointing mode gives voice activity and turn detection (`speechStart`, partial `transcript`, `speechEnd`,
+  `speechComplete`). Sessions last up to 60 minutes.
+- **File:** `POST /v1/asr/transcribe` with a WAV file (up to 32 MB or 10 minutes); 429 on rate limits.
+- **Price and limits:** $0.18 per hour of audio; failed and rate-limited requests are not billed; 25 languages; keyword
+  biasing; no word timestamps.
+- **Decision: not connected in Phase 4.** A browser cannot open the realtime socket without exposing `MODEL_API_KEY`.
+  Doing it securely needs a server relay that holds the key and forwards audio. Whether Supabase Edge Functions can keep
+  a long-lived two-way WebSocket open to Meta at real-time pace has not been verified, and the browser would also need
+  to capture and convert raw PCM (AudioWorklet). The file endpoint could work through the existing function, but it adds
+  a full upload per turn and gives no live turn detection.
+- **Plan:** (1) build and measure a relay prototype (edge function or the planned native app); (2) capture 16 kHz PCM
+  with an AudioWorklet and echo cancellation on; (3) use endpointing mode for turns; (4) apply the existing per-device
+  quota to audio minutes; (5) keep Web Speech as the fallback.
+
+### Privacy and security
+
+- The microphone is only requested after you tap Start Voice Conversation and confirm the explanation. It never runs in
+  the background. Every recognition session is aborted on stop, session limit, leaving the screen and page close; the
+  permission check releases its microphone track immediately.
+- OpenEyes does not record, store or log audio. The browser turns speech into text (possibly on its maker's servers).
+  Only the recognized text is sent to Meta AI through the OpenEyes server, which holds the key.
+- Requests stay under the existing server quota (90 per 10 minutes per device). Sessions end after 15 minutes.
+- Short-term conversation context is held in memory only and never saved.
+
+### Safety
+
+Voice conversation is not a mobility aid. It uses the same server safety rules as the rest of OpenEyes: no road-crossing
+or obstacle-avoidance guidance, uncertainty stated plainly, no invented details. With the camera off, Meta AI is told
+it cannot see.
+
+### Android and browser limitations
+
+- Speech recognition stops after each phrase; OpenEyes restarts it, and Android plays a tone each time.
+- Recognition may stop working without warning or need a network connection; OpenEyes then switches to tap-to-talk.
+- Echo cancellation in the browser is not reliable for its own speech output, so voice interruption may hear OpenEyes
+  itself. A text filter ignores phrases OpenEyes just said, but it is not perfect. Headphones help.
+- TalkBack: the state text is not announced on every change, to avoid the screen reader talking over the microphone.
+  Start, stop, tap-to-talk switches and errors are always spoken.
+- Firefox has no speech recognition; the Start Voice Conversation button is disabled with an explanation.
+
+### Remaining real-device testing
+
+- Hands-free turns on Android Chrome with TalkBack on and off, with and without headphones.
+- How often recognition restarts fail, and how annoying the Android tone is in practice.
+- Voice interruption and the echo filter on the phone speaker.
+- Wake phrase recognition accuracy.
+- Real latency figures from the timing details.
+- The microphone indicator turning off after stop, leaving the app and locking the screen.
+
 ## Meta AI integration (Phase 2)
 
 ### Verified against official Meta documentation
@@ -262,16 +408,18 @@ Never put the Meta key in a `VITE_*` variable: those are bundled into the browse
 ## Placeholders (not functional yet)
 
 - **SAM 3.1 segmentation** (exact object outlines). Find uses Muse Spark's description of position instead.
-- **Muse Voice Transcribe.** Voice input uses the browser speech service.
+- **Muse Voice Transcribe.** Evaluated in Phase 4 but not connected; voice input uses the browser speech service.
+- **Natural (neural) voices.** The interface is ready, but no voice service is connected; the browser voice is used.
 - **Meta glasses connection.** The Connect button never shows a fake success.
 - **Proactive assistance** beyond Live Explore. Smart Explore only speaks during a session you start; there is no background monitoring.
 
-## Planned features (Phase 4+, not started)
+## Planned features (Phase 5+, not started)
 
 - SAM 3.1 integration for Find
-- Muse Voice Transcribe for voice input
+- Muse Voice Transcribe for voice input through a secure server relay (see the evaluation above)
+- A connected natural voice provider behind the existing interface
 - Native Android app (Kotlin) using the official Meta Wearables Device Access Toolkit, hosting this UI
-- True hands-free interruption (barge-in) and higher-quality voices
+- Reliable hands-free interruption (needs echo-safe audio capture, likely in the native app)
 
 See [docs/INTEGRATION_PLAN.md](docs/INTEGRATION_PLAN.md) for the Android requirements.
 
@@ -327,6 +475,16 @@ Manual testing with TalkBack and VoiceOver on physical devices is still required
 
 ## Test results
 
+Phase 4 (v0.4.0): `npm run typecheck` passes, `npm test` **182 tests passing in 15 files** (the 148 from Phases 1-3,
+unchanged, plus 34 new), `npm run build` succeeds. The new tests use fake speech recognition, a fake voice, fake timers
+and mocked Meta responses, so they **do not prove behaviour on a real phone, microphone or speaker**. They cover: state
+transitions and invalid transitions, microphone permission and its denial, unsupported browsers, the hands-free next
+turn, tap-to-talk mode, silent rounds and repeated recognition errors falling back to tap-to-talk, permission revoked
+mid-session, manual interruption, experimental voice interruption with echo filtering, stale answers never spoken,
+late recognition results ignored, automatic descriptions held back while busy, wake phrase handling, session limit,
+cleanup on stop and on leaving the page, short-term follow-up context, camera-off answers, typed input during a
+conversation, natural voice playback, cancellation and fallback, settings validation, and an accessibility scan.
+
 Phase 3 (v0.3.0): `npm run typecheck` passes, `npm test` **148 tests passing in 11 files** (106 from Phases 1-2,
 unchanged, plus 42 new), `npm run build` succeeds. The new tests use fake timers, a fake camera and mocked Meta
 responses, so they **do not prove real Meta connectivity or real-device behaviour**. They cover: frame interval and
@@ -345,7 +503,8 @@ and UI flows on Explore, Find, Read and Assistant.
 
 - `MODEL_API_KEY` is configured and real answers were reported on Android by the project owner; Live Explore answer
   quality, latency and Meta's own rate limits have not been measured systematically.
-- Live Explore uses browser voices (not neural), tap-to-talk instead of true barge-in, and stops in the background.
+- Voice conversation and Live Explore use browser voices (not neural). Hands-free turns and the wake phrase depend on
+  the browser restarting speech recognition; voice interruption is experimental. Both stop in the background.
 - Smart Explore change detection uses word overlap between descriptions, so it can miss small changes or repeat a
   scene described in different words.
 - Find reports approximate positions in words only; it cannot measure distance and does not use SAM 3.1 yet.

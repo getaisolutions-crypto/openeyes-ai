@@ -3,6 +3,7 @@ import type { AIProvider, ObjectDetectionProvider, VisionProvider } from '../typ
 import type { CameraProvider } from '../types/camera';
 import type { DeviceProvider } from '../types/devices';
 import type { ContactsProvider, MemoryProvider } from '../types/memory';
+import type { NeuralTTSProvider } from '../types/tts';
 import type { VoiceProvider } from '../types/voice';
 import {
   createUnavailableAIProvider,
@@ -23,6 +24,8 @@ export interface Services {
   vision: VisionProvider;
   objectDetection: ObjectDetectionProvider;
   voice: VoiceProvider;
+  /** Natural voice service. Null until a provider is chosen and configured on the server; the browser voice is used meanwhile. */
+  neuralTTS: NeuralTTSProvider | null;
   camera: CameraProvider;
   memory: MemoryProvider;
   contacts: ContactsProvider;
@@ -50,6 +53,7 @@ export function createDefaultServices(): Services {
   return {
     ...createAIServices(),
     voice: createWebSpeechVoiceProvider(),
+    neuralTTS: null,
     camera: createBrowserCameraProvider(),
     memory: createLocalMemoryProvider(),
     contacts: createLocalContactsProvider(),

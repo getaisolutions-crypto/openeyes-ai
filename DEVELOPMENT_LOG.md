@@ -1,5 +1,44 @@
 # OpenEyes AI - Development Log
 
+## 2026-10-28 - Phase 4: Natural voice and real-time conversation (v0.4.0)
+
+### Implemented
+
+- **Start Voice Conversation** on Explore: microphone explanation dialog (first time), permission request, spoken start
+  and stop messages, large Talk / Interrupt and Stop conversation buttons, text state indicator, interim words shown.
+- **Conversation engine** with a checked state machine (idle, starting, listening, user-speaking, processing,
+  assistant-speaking, interrupted, waiting, error, stopped), a hands-free listening loop, turn ids with AbortController
+  so stale answers are never spoken, a single speech owner, a session limit (15 minutes) and cleanup on stop, leaving
+  the screen, page hide and unmount.
+- **Fallbacks:** tap-to-talk after 3 silent rounds or 2 recognition errors; disabled button with an explanation when
+  recognition is unsupported; clear spoken message when the microphone is denied or busy.
+- **Live Explore integration:** all speech routed through the conversation while it runs; automatic descriptions only
+  while idle; voice commands and Live Explore requests share the existing single-request queue; short-term follow-up
+  context (last 8 messages, memory only); camera-off answers labelled and Meta AI told it cannot see.
+- **Experimental, off by default:** "Hey OpenEyes" wake phrase (foreground only) and interrupt by voice with an echo
+  filter.
+- **Natural voice interface** (`NeuralTTSProvider`) and player with cancellation and per-sentence fallback to the browser
+  voice. No provider connected.
+- **Settings > Voice conversation**: hands-free turns, wake phrase, interrupt by voice, timing details; microphone
+  privacy note.
+- **Diagnostics:** recognition, reply, speech start and end-to-end times per turn; no words or audio.
+
+### Evaluated, not implemented
+
+- **Meta Muse Voice Transcribe:** the realtime API needs the key inside the WebSocket handshake, so it needs a server
+  relay. Not built because Edge Function WebSocket relaying is unverified. Plan documented in the README.
+- **Neural TTS providers:** Google, Azure, Amazon Polly, OpenAI and ElevenLabs compared in the README. Meta has no TTS
+  model.
+
+### Checks
+
+- `npm run typecheck`: pass. `npm test`: 182 passing in 15 files (148 existing unchanged, 34 new). `npm run build`: pass.
+- Meta API integration and the edge function were not changed.
+
+### Not verified
+
+- Nothing in Phase 4 has been tested on a real Android phone yet. See "Remaining real-device testing" in the README.
+
 ## 2026-10-28 - Phase 3: Live Explore and interactive voice companion (v0.3.0)
 
 ### Implemented

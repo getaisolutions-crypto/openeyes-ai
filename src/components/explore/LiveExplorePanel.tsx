@@ -6,6 +6,8 @@ import { ConfirmDialog } from '../Dialog';
 import { OptionGroup } from '../FormControls';
 import { LiveSpeechControls } from './LiveSpeechControls';
 import { LiveTranscript } from './LiveTranscript';
+import { VoiceConversationControls } from './VoiceConversationControls';
+import { VOICE_SESSION_MAX_MINUTES, useVoiceConversation } from '../../hooks/useVoiceConversation';
 import { MODE_LABELS, useLiveExplore } from '../../hooks/useLiveExplore';
 import { SPEECH_ERROR_MESSAGES, useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { useSettings } from '../../hooks/useSettings';
@@ -41,15 +43,40 @@ export function LiveExplorePanel({ onActiveChange }: Props) {
   const { settings, updateSettings } = useSettings();
   const [typed, setTyped] = useState('');
   const [confirmStart, setConfirmStart] = useState(false);
+  const [confirmVoice, setConfirmVoice] = useState(false);
   const available = vision.getStatus().available;
-  const { running, status, startSession, handleInput, setConversationActive } = live;
+  const { running, status, startSession, handleInput, setConversationActive, addNotice, addHeard } = live;
 
   const requestStart = useCallback(() => {
     if (readJSON<boolean>(STORAGE_KEYS.liveExploreConsent, false)) void startSession();
     else setConfirmStart(true);
   }, [startSession]);
 
-  const recognition = useSpeechRecognition({ onFinal: (text) => handleInput(text, requestStart) });
+  const recognition = useSpeechRecognition({ onFinal: (text) => void handleInput(text, requestStart) });
+
+  const conversation = useVoiceConversation({
+    speech: live.speech,
+    handleTurn: (text, signal) => handleInput(text, requestStart, signal),
+    cancelPending: live.cancelPending,
+    setSpeechRouter: live.setSpeechRouter,
+    say: live.say,
+    addNotice,
+    addHeard,
+    onEnded: live.clearConversation,
+    isExploring: () => running,
+  });
+
+  const startConversation = () => {
+    setConfirmVoice(false);
+    writeJSON(STORAGE_KEYS.voiceConversationConsent, true);
+    recognition.stop();
+    void conversation.start();
+  };
+
+  const requestConversation = () => {
+    if (readJSON<boolean>(STORAGE_KEYS.voiceConversationConsent, false)) startConversation();
+    else setConfirmVoice(true);
+  };
 
   useEffect(() => {
     if (!recognition.listening) setConversationActive(false);
@@ -65,7 +92,8 @@ export function LiveExplorePanel({ onActiveChange }: Props) {
   const submitTyped = (event: FormEvent) => {
     event.preventDefault();
     if (!typed.trim()) return;
-    handleInput(typed.slice(0, 500), requestStart);
+    if (conversation.active) conversation.submit(typed.slice(0, 500));
+    else void handleInput(typed.slice(0, 500), requestStart);
     setTyped('');
   };
 
@@ -188,16 +216,26 @@ export function LiveExplorePanel({ onActiveChange }: Props) {
         )}
 
         <div className="flex flex-col items-center gap-3 rounded-xl bg-surface-2 p-4 text-center">
-          <MicButton
-            listening={recognition.listening}
-            onStart={listen}
-            onStop={recognition.stop}
-            idleLabel="Talk to OpenEyes. Stops speech and listens"
+          <VoiceConversationControls
+            conversation={conversation}
+            showDiagnostics={settings.voiceDiagnostics}
+            wakePhrase={settings.conversationWakePhrase}
+            onRequestStart={requestConversation}
           />
-          <p className="font-bold" aria-hidden="true">
-            {recognition.listening ? 'Listening' : 'Tap to talk'}
-          </p>
-          {recognition.interim && <p className="text-muted">{recognition.interim}</p>}
+          {!conversation.active && (
+            <>
+              <MicButton
+                listening={recognition.listening}
+                onStart={listen}
+                onStop={recognition.stop}
+                idleLabel="Talk to OpenEyes. Stops speech and listens"
+              />
+              <p className="font-bold" aria-hidden="true">
+                {recognition.listening ? 'Listening' : 'Tap to talk'}
+              </p>
+              {recognition.interim && <p className="text-muted">{recognition.interim}</p>}
+            </>
+          )}
           <p className="text-sm text-muted">
             Try: &quot;What&apos;s in front of me?&quot;, &quot;What&apos;s on my left?&quot;, &quot;Read that sign&quot;, &quot;Find my keys&quot;,
             &quot;Describe that again&quot;, &quot;Remember this&quot;, &quot;Pause&quot;, &quot;Keep exploring&quot;, &quot;Stop&quot;.
@@ -257,6 +295,27 @@ export function LiveExplorePanel({ onActiveChange }: Props) {
           void startSession();
         }}
         onCancel={() => setConfirmStart(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmVoice}
+        title="Before the voice conversation starts"
+        message={
+          <div className="space-y-2">
+            <p>OpenEyes will ask to use the microphone. It listens only while the conversation is running, and you will hear a short tone each time it starts listening on Android.</p>
+            <p>
+              Your browser turns your speech into text. Depending on the browser, this may happen on the device or on the browser maker's servers.
+              OpenEyes never records or saves audio. The recognized words are sent securely to Meta AI through the OpenEyes server to get a reply.
+            </p>
+            <p>
+              The conversation stops when you say stop conversation, tap Stop conversation, leave the screen or switch apps, and after
+              {' '}{VOICE_SESSION_MAX_MINUTES} minutes. OpenEyes never listens in the background.
+            </p>
+          </div>
+        }
+        confirmLabel="I understand, turn on microphone"
+        onConfirm={startConversation}
+        onCancel={() => setConfirmVoice(false)}
       />
 
       <ConfirmDialog
