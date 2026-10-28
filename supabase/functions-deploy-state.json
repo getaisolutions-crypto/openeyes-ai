@@ -4,6 +4,10 @@
     "openeyes-ai": {
       "hasChanged": false,
       "hash": "075df07b30c22db503b83eef1af489aacefacda7c2b85ccb2d7036a6d2065d96"
+    },
+    "openeyes-voice": {
+      "hasChanged": false,
+      "hash": "4ec545fa5cec5a59c0c9f5d47da8f878492ccc0b6509c615a1a6183311e565aa"
     }
   }
 }

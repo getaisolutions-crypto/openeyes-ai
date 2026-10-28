@@ -1,2 +1,6 @@
 [functions.openeyes-ai]
 verify_jwt = true
+
+# Browsers cannot send headers on WebSocket connections; the function checks the app key and single-use tickets itself.
+[functions.openeyes-voice]
+verify_jwt = false

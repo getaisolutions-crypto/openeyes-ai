@@ -16,4 +16,10 @@ describe('voice conversation settings', () => {
     expect(s.conversationBargeIn).toBe(true);
     expect(s.voiceDiagnostics).toBe(false);
   });
+
+  it('uses Meta Voice by default and accepts only known recognition choices', () => {
+    expect(DEFAULT_SETTINGS.speechRecognition).toBe('meta');
+    expect(sanitizeSettings({ speechRecognition: 'browser' }).speechRecognition).toBe('browser');
+    expect(sanitizeSettings({ speechRecognition: 'elevenlabs' }).speechRecognition).toBe('meta');
+  });
 });

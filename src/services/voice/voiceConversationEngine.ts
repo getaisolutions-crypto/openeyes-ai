@@ -21,6 +21,8 @@ export interface TurnContext {
 
 export interface TurnMetrics {
   turnId: number;
+  /** From the microphone opening to the first words being recognized. */
+  firstTranscriptMs: number | null;
   /** From the first words heard to the final transcript. */
   recognitionMs: number | null;
   /** From the final transcript to the first reply being ready. */
@@ -29,7 +31,13 @@ export interface TurnMetrics {
   playbackStartMs: number | null;
   /** From the final transcript to audio starting. */
   endToEndMs: number | null;
+  /** How long the spoken reply played. */
+  playbackMs: number | null;
+  /** From the reply finishing to the microphone listening again. */
+  resumeListeningMs: number | null;
 }
+
+type TurnTracking = TurnMetrics & { heardAt: number; speakAt: number | null; replyUid: number | null; playingAt: number | null; endedAt: number | null };
 
 export type ConversationEndReason =
   | 'user'
@@ -112,7 +120,8 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
   let bargeRestarts = 0;
   let awakeUntil = 0;
 
-  let metrics: (TurnMetrics & { heardAt: number; speakAt: number | null; sent: boolean }) | null = null;
+  let metrics: TurnTracking | null = null;
+  let listenStartedAt = 0;
 
   const emitState = () => deps.onState(state, { bargeInListening: Boolean(bargeSession) });
 
@@ -125,10 +134,9 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
   }
 
   function sendMetrics() {
-    if (!metrics || metrics.sent) return;
-    metrics.sent = true;
-    const { turnId: id, recognitionMs, responseMs, playbackStartMs, endToEndMs } = metrics;
-    deps.onMetrics({ turnId: id, recognitionMs, responseMs, playbackStartMs, endToEndMs });
+    if (!metrics) return;
+    const { turnId: id, firstTranscriptMs, recognitionMs, responseMs, playbackStartMs, endToEndMs, playbackMs, resumeListeningMs } = metrics;
+    deps.onMetrics({ turnId: id, firstTranscriptMs, recognitionMs, responseMs, playbackStartMs, endToEndMs, playbackMs, resumeListeningMs });
   }
 
   function clearListenTimer() {
@@ -218,6 +226,11 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
     if (!transition('listening')) return;
     const id = listenId;
     speechStartedAt = null;
+    listenStartedAt = now();
+    if (metrics && metrics.endedAt !== null && metrics.resumeListeningMs === null) {
+      metrics.resumeListeningMs = listenStartedAt - metrics.endedAt;
+      sendMetrics();
+    }
     lastError = null;
     session = deps.recognizer.startListening({
       onInterim: (text) => {
@@ -282,11 +295,16 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
       turnId: id,
       heardAt,
       speakAt: null,
-      sent: false,
+      replyUid: null,
+      playingAt: null,
+      endedAt: null,
+      firstTranscriptMs: speechStart === null ? null : speechStart - listenStartedAt,
       recognitionMs: speechStart === null ? null : heardAt - speechStart,
       responseMs: null,
       playbackStartMs: null,
       endToEndMs: null,
+      playbackMs: null,
+      resumeListeningMs: null,
     };
     transition('processing');
     try {
@@ -298,7 +316,10 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
     pending = false;
     turnAbort = null;
     if (state === 'processing') {
-      sendMetrics();
+      if (metrics?.turnId === id && metrics.endedAt === null) {
+        metrics.endedAt = now();
+        sendMetrics();
+      }
       resumeAfterTurn(CONVERSATION_LIMITS.restartDelayMs);
     }
   }
@@ -326,16 +347,18 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
     const uid = ++utteranceId;
     spokenText = text;
     bargeRestarts = 0;
-    if (countsAsReply && metrics && metrics.speakAt === null && !metrics.sent) {
+    if (countsAsReply && metrics && metrics.speakAt === null) {
       metrics.speakAt = now();
+      metrics.replyUid = uid;
       metrics.responseMs = metrics.speakAt - metrics.heardAt;
     }
     transition('assistant-speaking');
     startBargeIn(uid);
     deps.output.speak(text, {
       onStart: () => {
-        if (uid !== utteranceId || !metrics || metrics.speakAt === null || metrics.sent) return;
+        if (uid !== utteranceId || !metrics || metrics.replyUid !== uid || metrics.speakAt === null || metrics.playingAt !== null) return;
         const t = now();
+        metrics.playingAt = t;
         metrics.playbackStartMs = t - metrics.speakAt;
         metrics.endToEndMs = t - metrics.heardAt;
         sendMetrics();
@@ -344,9 +367,14 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
         if (uid !== utteranceId) return;
         stopBargeIn();
         if (!active) return;
+        if (metrics && metrics.replyUid === uid && metrics.endedAt === null) {
+          const t = now();
+          metrics.endedAt = t;
+          if (metrics.playingAt !== null) metrics.playbackMs = t - metrics.playingAt;
+          sendMetrics();
+        }
         if (pending) transition('processing');
         else {
-          sendMetrics();
           resumeAfterTurn(CONVERSATION_LIMITS.afterSpeechDelayMs);
         }
       },

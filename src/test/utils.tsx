@@ -40,6 +40,7 @@ export function createTestServices(overrides: Partial<Services> = {}): Services 
     ...createDefaultServices(),
     ...createUnavailableAIServices(),
     voice: createFakeVoice(),
+    metaVoice: null,
     camera: createFakeCamera(),
     ...overrides,
   };

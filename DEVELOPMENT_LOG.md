@@ -1,5 +1,42 @@
 # OpenEyes AI - Development Log
 
+## 2026-10-28 - Phase 4.1: Meta Muse Voice Transcribe and hands-free fix (v0.4.1)
+
+### Android listening bug
+
+- **Cause:** hands-free listening resumed only from `SpeechSynthesisUtterance.onend`, which Android Chrome often drops
+  (long utterances, unreferenced utterances). The conversation then stayed in "OpenEyes speaking" until a tap.
+- **Fix:** `browserSpeechPlayback.ts` speaks replies as referenced chunks and monitors `speaking/pending/paused`. A chunk
+  ends on its real event or after it was seen speaking and the engine is quiet for 3 polls; a chunk that never starts
+  is retried once then skipped; pause is never treated as finished; the stuck guard is 3x the estimate plus 8 s per
+  chunk, so long replies are not cut off. Stop cancels monitoring.
+
+### Meta Voice Transcribe
+
+- Verified the API contract from dev.meta.ai/docs/speech-to-text (endpoint, model, handshake auth, PCM_16KHZ,
+  ENDPOINTING events, endStream, close codes).
+- New edge function `openeyes-voice`: POST issues a single-use 30 s ticket (hashed in `voice_session_tickets`, rate and
+  audio-minute limits per hashed client address); WebSocket `?ticket=` relays audio to Meta with `MODEL_API_KEY` only in
+  the server-side handshake; whitelisted events back; 60 s per connection, pacing and frame limits; logs only audio
+  duration and outcome.
+- Browser: AudioWorklet capture at 16 kHz PCM (ScriptProcessor fallback), `metaVoiceRecognizer.ts` (one connection
+  per turn, partials displayed, `speechComplete` submitted, no-speech and max-turn timers, full cleanup),
+  `recognizerFallback.ts` (browser recognizer for the same turn, then for the session after 2 failures, with notices).
+- Settings > Voice conversation > Speech recognition: Meta Voice (default) or Browser. Consent text updated.
+- Diagnostics add recognizer, first words, final words, speech length and time to listening again.
+
+### Verification
+
+- **Real API:** through the deployed relay, a spoken clip returned partials and `speechComplete: "What's on the table in
+  front of me?"`, clean close 1000; silence run closed cleanly; ticket reuse refused. Run twice.
+- **Automated:** typecheck passes; 238 tests in 18 files pass (56 new, mocked); build passes.
+- **Not verified:** hands-free conversation on a real Android phone.
+
+### GitHub
+
+- No local git repository in this workspace. The GitHub `main` branch `package.json` is version 0.2.0, older than this
+  project, so nothing was pulled from it. Push this project from Bolt's GitHub integration to bring GitHub up to date.
+
 ## 2026-10-28 - Phase 4: Natural voice and real-time conversation (v0.4.0)
 
 ### Implemented

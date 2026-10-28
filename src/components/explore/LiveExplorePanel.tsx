@@ -304,7 +304,9 @@ export function LiveExplorePanel({ onActiveChange }: Props) {
           <div className="space-y-2">
             <p>OpenEyes will ask to use the microphone. It listens only while the conversation is running, and you will hear a short tone each time it starts listening on Android.</p>
             <p>
-              Your browser turns your speech into text. Depending on the browser, this may happen on the device or on the browser maker's servers.
+              {settings.speechRecognition === 'meta'
+                ? 'While OpenEyes is listening, your microphone audio is sent securely through the OpenEyes server to Meta Voice to turn it into text. If Meta Voice is unavailable, your browser does this instead.'
+                : "Your browser turns your speech into text. Depending on the browser, this may happen on the device or on the browser maker's servers."}{' '}
               OpenEyes never records or saves audio. The recognized words are sent securely to Meta AI through the OpenEyes server to get a reply.
             </p>
             <p>

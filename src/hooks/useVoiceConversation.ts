@@ -13,6 +13,12 @@ import {
 } from '../services/voice/voiceConversationEngine';
 import type { ConversationState } from '../services/voice/conversationStateMachine';
 import type { Settings } from '../types/settings';
+import type { SpeechRecognizer, VoiceProvider } from '../types/voice';
+import {
+  createRecognizerWithFallback,
+  type FallbackEvent,
+  type RecognizerWithFallback,
+} from '../services/voice/recognizerFallback';
 
 export const VOICE_SESSION_MAX_MINUTES = 15;
 
@@ -38,6 +44,19 @@ function engineConfig(s: Settings) {
   };
 }
 
+const FALLBACK_MESSAGES: Record<FallbackEvent, string> = {
+  turn: 'Meta voice did not answer, so I am listening with the browser for this question.',
+  session: 'Meta voice is not available right now, so I am using the browser to listen for the rest of this conversation.',
+};
+
+function browserRecognizer(voice: VoiceProvider): SpeechRecognizer {
+  return {
+    id: 'browser',
+    isSupported: () => voice.isRecognitionSupported(),
+    startListening: (handlers) => voice.startListening(handlers),
+  };
+}
+
 /** Rough reading time for the screen reader when spoken replies are off, so listening does not start over it. */
 function readingTimeMs(text: string, rate: number) {
   return Math.min(15_000, 1200 + (text.length * 60) / Math.max(rate, 0.5));
@@ -58,7 +77,7 @@ export interface VoiceConversationOptions {
 }
 
 export function useVoiceConversation(options: VoiceConversationOptions) {
-  const { voice } = useServices();
+  const { voice, metaVoice } = useServices();
   const { settings } = useSettings();
   const { announce } = useAnnouncer();
   const [state, setState] = useState<ConversationState>('idle');
@@ -70,15 +89,33 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const engineRef = useRef<VoiceConversationEngine | null>(null);
+  const recognizerRef = useRef<RecognizerWithFallback | null>(null);
+  const [recognizerId, setRecognizerId] = useState<SpeechRecognizer['id']>('browser');
+
+  const buildRecognizer = useCallback(() => {
+    const browser = browserRecognizer(voice);
+    const wantsMeta = settingsRef.current.speechRecognition === 'meta' && metaVoice;
+    const recognizer = wantsMeta
+      ? createRecognizerWithFallback(metaVoice, browser.isSupported() ? browser : null, (event, active) => {
+          setRecognizerId(active);
+          const message = FALLBACK_MESSAGES[event];
+          optionsRef.current.addNotice(message);
+          announce(message);
+        })
+      : createRecognizerWithFallback(browser, null, () => undefined);
+    recognizerRef.current = recognizer;
+    setRecognizerId(recognizer.activeId);
+    return recognizer;
+  }, [announce, metaVoice, voice]);
 
   const getEngine = useCallback((): VoiceConversationEngine => {
     if (engineRef.current) return engineRef.current;
     const engine = createVoiceConversationEngine(
       {
         recognizer: {
-          isSupported: () => voice.isRecognitionSupported(),
+          isSupported: () => (recognizerRef.current ?? buildRecognizer()).isSupported(),
           requestMicrophone: () => voice.requestMicrophone(),
-          startListening: (handlers) => voice.startListening(handlers),
+          startListening: (handlers) => (recognizerRef.current ?? buildRecognizer()).startListening(handlers),
         },
         output: {
           speak: (text, { onStart, onEnd }) => {
@@ -136,7 +173,7 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
     );
     engineRef.current = engine;
     return engine;
-  }, [announce, voice]);
+  }, [announce, buildRecognizer, voice]);
 
   useEffect(() => {
     engineRef.current?.setConfig(engineConfig(settings));
@@ -166,6 +203,10 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
     setMetrics(null);
     const s = settingsRef.current;
     engine.setConfig(engineConfig(s));
+    const recognizer = buildRecognizer();
+    if (s.speechRecognition === 'meta' && recognizer.activeId === 'browser') {
+      optionsRef.current.addNotice('Meta voice is not available here, so the browser will listen.');
+    }
     optionsRef.current.setSpeechRouter({
       say: (text, kind) => engine.say(text, kind),
       hush: () => engine.hush(),
@@ -176,14 +217,15 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
     parts.push('Say stop conversation to end.');
     const started = await engine.start(parts.join(' '));
     if (started) optionsRef.current.addNotice('Voice conversation started. Microphone on.');
-  }, [getEngine]);
+  }, [buildRecognizer, getEngine]);
 
   const stop = useCallback(() => engineRef.current?.stop('user'), []);
   const interrupt = useCallback(() => engineRef.current?.interrupt(), []);
   const submit = useCallback((text: string) => engineRef.current?.submit(text), []);
 
   return {
-    supported: voice.isRecognitionSupported(),
+    supported: voice.isRecognitionSupported() || Boolean(metaVoice?.isSupported()),
+    recognizerId,
     state,
     active,
     interim,

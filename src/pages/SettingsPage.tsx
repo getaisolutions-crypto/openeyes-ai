@@ -14,7 +14,7 @@ import { VoiceSelect } from '../components/VoiceSelect';
 import { META_MODELS } from '../services/ai/metaModels';
 import { MetaConnectionCheck } from '../components/MetaConnectionCheck';
 import { clearAllAppData } from '../utils/storage';
-import type { AssistanceMode, ExploreMode, ProactiveFrequency, TextSize, Theme } from '../types/settings';
+import type { AssistanceMode, ExploreMode, ProactiveFrequency, SpeechRecognitionChoice, TextSize, Theme } from '../types/settings';
 import type { ResponseLength } from '../types/ai';
 
 function Section({ title, badge, children }: { title: string; badge?: ReactNode; children: ReactNode }) {
@@ -135,10 +135,26 @@ export default function SettingsPage() {
         <div className="py-3">
           <Notice variant="info" title="How the microphone is used">
             The microphone is only used after you press Start Voice Conversation on the Explore screen, and it turns off when
-            you stop, leave the screen or switch apps. Your browser turns speech into text; OpenEyes never records or saves
-            audio. The recognized words are sent to Meta AI through the OpenEyes server to get a reply.
+            you stop, leave the screen or switch apps. It is off while OpenEyes speaks. OpenEyes never records or saves audio.
+            The recognized words are sent to Meta AI through the OpenEyes server to get a reply.
           </Notice>
         </div>
+        <OptionGroup<SpeechRecognitionChoice>
+          legend="Speech recognition"
+          name="speechRecognition"
+          value={settings.speechRecognition}
+          onChange={(v) =>
+            set('speechRecognition', v, v === 'meta' ? 'Meta Voice speech recognition on.' : 'Browser speech recognition on.')
+          }
+          options={[
+            {
+              value: 'meta',
+              label: 'Meta Voice',
+              description: 'Audio is streamed through the OpenEyes server to Meta Voice Transcribe while listening. Falls back to the browser if unavailable.',
+            },
+            { value: 'browser', label: 'Browser', description: "Your browser's own speech recognition." },
+          ]}
+        />
         <Switch
           label="Hands-free turns"
           description="After each reply, listen again by itself. Turn off to tap Talk before every question."

@@ -287,6 +287,95 @@ describe('voice conversation engine', () => {
   });
 });
 
+describe('hands-free conversation (Phase 4.1)', () => {
+  async function ask(t: Awaited<ReturnType<typeof started>>, question: string, answer: string) {
+    t.deps.handleTurn.mockImplementationOnce(async () => {
+      t.engine.say(answer, 'reply');
+    });
+    t.advance(500);
+    t.lastListen().onInterim?.(question.slice(0, 6));
+    t.advance(900);
+    t.lastListen().onFinal(question);
+    await t.flush();
+  }
+
+  it('answers two questions in a row with no tap, listening again only after speech ends', async () => {
+    const t = await started();
+    await ask(t, "What's around me?", 'A kitchen with a table.');
+    expect(t.engine.state).toBe('assistant-speaking');
+    t.spoken[t.spoken.length - 1].onStart();
+    t.advance(5000);
+    expect(t.engine.state).toBe('assistant-speaking');
+    t.spoken[t.spoken.length - 1].onEnd();
+    t.advance(CONVERSATION_LIMITS.afterSpeechDelayMs);
+    expect(t.engine.state).toBe('listening');
+
+    await ask(t, "What's on my left?", 'A window.');
+    expect(t.deps.handleTurn).toHaveBeenNthCalledWith(2, "What's on my left?", expect.anything());
+    t.finishSpeech();
+    t.advance(CONVERSATION_LIMITS.afterSpeechDelayMs);
+    expect(t.engine.state).toBe('listening');
+  });
+
+  it('never has two microphone sessions open: each new round aborts the previous one', async () => {
+    const t = await started();
+    await ask(t, 'Read this sign', 'It says exit.');
+    expect(t.aborts.slice(0, -1).every((a) => a.mock.calls.length > 0)).toBe(true);
+    t.finishSpeech();
+    t.advance(CONVERSATION_LIMITS.afterSpeechDelayMs);
+    expect(t.aborts.slice(0, -1).every((a) => a.mock.calls.length > 0)).toBe(true);
+    expect(t.aborts[t.aborts.length - 1]).not.toHaveBeenCalled();
+  });
+
+  it('stop during speech: a late speech end and late recognition events do not restart listening', async () => {
+    const t = await started();
+    const oldListen = t.lastListen();
+    await ask(t, 'Describe the room', 'A long description.');
+    const reply = t.spoken[t.spoken.length - 1];
+    t.engine.stop('user');
+    const count = t.listens.length;
+    reply.onStart();
+    reply.onEnd();
+    oldListen.onFinal('ghost words');
+    oldListen.onEnd();
+    t.advance(10_000);
+    expect(t.listens.length).toBe(count);
+    expect(t.engine.state).toBe('stopped');
+    expect(t.deps.handleTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('the Talk button still interrupts a reply and opens the microphone', async () => {
+    const t = await started();
+    await ask(t, 'Describe the room', 'A long description.');
+    const count = t.listens.length;
+    t.engine.interrupt();
+    t.advance(1000);
+    expect(t.deps.output.stop).toHaveBeenCalled();
+    expect(t.listens.length).toBeGreaterThan(count);
+    expect(['listening', 'user-speaking']).toContain(t.engine.state);
+  });
+
+  it('reports first words, reply, playback and resume timings without any words', async () => {
+    const t = await started();
+    await ask(t, 'What is here?', 'A chair.');
+    const reply = t.spoken[t.spoken.length - 1];
+    reply.onStart();
+    t.advance(2000);
+    reply.onEnd();
+    t.advance(CONVERSATION_LIMITS.afterSpeechDelayMs);
+    const calls = t.deps.onMetrics.mock.calls;
+    const last = calls[calls.length - 1]?.[0];
+    expect(last).toMatchObject({
+      turnId: 1,
+      firstTranscriptMs: 500,
+      recognitionMs: 900,
+      playbackMs: 2000,
+      resumeListeningMs: CONVERSATION_LIMITS.afterSpeechDelayMs,
+    });
+    expect(JSON.stringify(last)).not.toContain('chair');
+  });
+});
+
 describe('utterance helpers', () => {
   it('matches the wake phrase in common spellings', () => {
     expect(matchWakePhrase('Hey OpenEyes, what is this?')).toEqual({ matched: true, rest: 'what is this?' });

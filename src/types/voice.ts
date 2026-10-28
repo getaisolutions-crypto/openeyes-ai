@@ -5,6 +5,8 @@ export type SpeechErrorKind =
   | 'audio-capture'
   | 'network'
   | 'aborted'
+  /** The Meta voice service could not be reached, refused the session or failed mid-turn. */
+  | 'service-unavailable'
   | 'unknown';
 
 export interface ListeningHandlers {
@@ -12,6 +14,13 @@ export interface ListeningHandlers {
   onFinal: (transcript: string) => void;
   onError: (kind: SpeechErrorKind) => void;
   onEnd: () => void;
+}
+
+/** Anything that can listen for one turn of speech: the browser's recognizer or Meta Muse Voice Transcribe. */
+export interface SpeechRecognizer {
+  readonly id: 'meta-voice' | 'browser';
+  isSupported(): boolean;
+  startListening(handlers: ListeningHandlers): ListeningSession;
 }
 
 export interface ListeningSession {
@@ -35,7 +44,7 @@ export interface VoiceOption {
   lang: string;
 }
 
-/** Speech input and output. Browser Web Speech implementation today; see README for the Muse Voice Transcribe plan. */
+/** Browser speech input and output (Web Speech API). Meta Muse Voice Transcribe is a separate SpeechRecognizer. */
 export interface VoiceProvider {
   readonly id: string;
   isRecognitionSupported(): boolean;

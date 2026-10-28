@@ -52,7 +52,7 @@ export function AppLayout() {
               ))}
             </ul>
           </nav>
-          <p className="mt-auto px-3 text-sm text-muted">Version 0.4.0, Phase 4 Voice conversation</p>
+          <p className="mt-auto px-3 text-sm text-muted">Version 0.4.1, Phase 4.1 Meta Voice conversation</p>
         </div>
       </aside>
 

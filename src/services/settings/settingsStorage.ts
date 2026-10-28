@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   conversationHandsFree: true,
   conversationWakePhrase: false,
   conversationBargeIn: false,
+  speechRecognition: 'meta',
   voiceDiagnostics: false,
 };
 
@@ -63,6 +64,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     conversationHandsFree: bool(s.conversationHandsFree, d.conversationHandsFree),
     conversationWakePhrase: bool(s.conversationWakePhrase, d.conversationWakePhrase),
     conversationBargeIn: bool(s.conversationBargeIn, d.conversationBargeIn),
+    speechRecognition: oneOf(s.speechRecognition, ['meta', 'browser'] as const, d.speechRecognition),
     voiceDiagnostics: bool(s.voiceDiagnostics, d.voiceDiagnostics),
   };
 }

@@ -6,8 +6,12 @@ OpenEyes AI is a voice-first, accessibility-first personal assistant designed to
 understand their surroundings, find objects, read text, remember important information and accomplish everyday tasks
 more independently. The long-term target is Android smartphones and compatible Meta AI glasses.
 
-> Status: **Phase 4 (v0.4.0): voice conversation implemented and tested in automated tests; not yet verified on a real
-> Android phone.** Explore now has **Start Voice Conversation**: a foreground, back-and-forth spoken conversation that
+> Status: **Phase 4.1 (v0.4.1): Meta Muse Voice Transcribe connected through a secure OpenEyes server relay and
+> verified with real Meta API requests; the Android "tap the microphone after every answer" bug fixed in code and covered
+> by automated tests. Hands-free conversation has not yet been verified on a real Android phone.** See
+> [Phase 4.1](#phase-41-meta-voice-transcribe-and-hands-free-fix).
+>
+> Phase 4 (v0.4.0): voice conversation. Explore now has **Start Voice Conversation**: a foreground, back-and-forth spoken conversation that
 > listens again after each reply and ends when you say or tap stop. Natural (neural) voices are prepared but **not
 > connected**; the browser voice is still used. See [Voice conversation (Phase 4)](#voice-conversation-phase-4).
 >
@@ -245,7 +249,7 @@ the screen reader and OpenEyes waits an estimated reading time before listening 
 
 | Part | Provider in use | Notes |
 | --- | --- | --- |
-| Speech recognition | Browser Web Speech API | On Android Chrome this usually runs through Google's speech service. |
+| Speech recognition | **Meta Muse Voice Transcribe** (default) through the `openeyes-voice` relay | Falls back to the browser Web Speech API automatically, or by choice in Settings. |
 | Speech output | Browser SpeechSynthesis | Default and fallback. |
 | Natural voice | **None connected** | `NeuralTTSProvider` interface (`types/tts.ts`) and player (`neuralSpeechPlayer.ts`) are ready. `Services.neuralTTS` is `null`. If a provider is added and fails, that sentence falls back to the browser voice. |
 
@@ -281,7 +285,7 @@ Source: https://dev.meta.ai/docs/speech-to-text (model `muse-voice-transcribe-1.
 - **File:** `POST /v1/asr/transcribe` with a WAV file (up to 32 MB or 10 minutes); 429 on rate limits.
 - **Price and limits:** $0.18 per hour of audio; failed and rate-limited requests are not billed; 25 languages; keyword
   biasing; no word timestamps.
-- **Decision: not connected in Phase 4.** A browser cannot open the realtime socket without exposing `MODEL_API_KEY`.
+- **Phase 4 decision (superseded in Phase 4.1, see below):** not connected. A browser cannot open the realtime socket without exposing `MODEL_API_KEY`.
   Doing it securely needs a server relay that holds the key and forwards audio. Whether Supabase Edge Functions can keep
   a long-lived two-way WebSocket open to Meta at real-time pace has not been verified, and the browser would also need
   to capture and convert raw PCM (AudioWorklet). The file endpoint could work through the existing function, but it adds
@@ -295,8 +299,9 @@ Source: https://dev.meta.ai/docs/speech-to-text (model `muse-voice-transcribe-1.
 - The microphone is only requested after you tap Start Voice Conversation and confirm the explanation. It never runs in
   the background. Every recognition session is aborted on stop, session limit, leaving the screen and page close; the
   permission check releases its microphone track immediately.
-- OpenEyes does not record, store or log audio. The browser turns speech into text (possibly on its maker's servers).
-  Only the recognized text is sent to Meta AI through the OpenEyes server, which holds the key.
+- OpenEyes does not record, store or log audio. With Meta Voice (default), microphone audio is streamed through the
+  OpenEyes server to Meta only while listening; with the browser option, the browser turns speech into text (possibly
+  on its maker's servers). The recognized text is sent to Meta AI through the OpenEyes server, which holds the key.
 - Requests stay under the existing server quota (90 per 10 minutes per device). Sessions end after 15 minutes.
 - Short-term conversation context is held in memory only and never saved.
 
@@ -324,6 +329,96 @@ it cannot see.
 - Wake phrase recognition accuracy.
 - Real latency figures from the timing details.
 - The microphone indicator turning off after stop, leaving the app and locking the screen.
+
+## Phase 4.1: Meta Voice Transcribe and hands-free fix
+
+### The Android listening bug
+
+**Symptom:** after each spoken answer, the user had to tap the microphone again.
+
+**Cause (from the code):** hands-free listening restarted only from the speech synthesis `onend` event. Android Chrome
+often drops `onend` (and sometimes `onstart`), especially for long utterances or utterances that were not kept
+referenced and were garbage-collected. With no other signal, the conversation stayed in "OpenEyes speaking" forever.
+
+**Fix (`browserSpeechPlayback.ts`):**
+
+- Replies are split into short chunks (max 180 characters, on sentence boundaries), each held in memory until done.
+- A monitor polls `speechSynthesis.speaking / pending / paused` every 250 ms. A chunk counts as finished when the real
+  `end` event arrives, **or** when it was seen speaking and then the engine is quiet for 3 polls in a row.
+- A silent engine is **not** assumed to mean success: if a chunk never starts within 2.5 s it is retried once, then
+  skipped. Only the last chunk finishing ends the reply.
+- **Long replies:** there is no fixed timeout. The stuck-speech guard fires only after 3x the estimated chunk duration
+  plus 8 seconds, per chunk, so long descriptions are never cut off.
+- **Paused speech** is never treated as finished; paused time is excluded from the stuck guard, and if Android drops the
+  speech while paused, resume replays the chunk.
+- Stop and newer speech cancel the monitor, so a stopped conversation can never be restarted by a late event.
+  Conversation callbacks are also guarded by per-listen and per-utterance ids.
+
+### Meta Muse Voice Transcribe (verified)
+
+Facts used, from https://dev.meta.ai/docs/speech-to-text:
+
+| Item | Value |
+| --- | --- |
+| Endpoint | `wss://api.meta.ai/v1/asr/realtime` |
+| Model | `muse-voice-transcribe-1.0` |
+| Authentication | first JSON frame `{"authorization":{"accessToken":"Bearer <key>"}, ...}` (headers are ignored) |
+| Audio | binary 16-bit little-endian mono PCM, `PCM_16KHZ`, sent at real-time pace |
+| Mode | `ENDPOINTING` (Meta detects turns), `partialMode: CUMULATIVE` |
+| Events | handshake ack (`sessionId`), `speechStart`, `transcript` (partials), `speechEnd`, `speechComplete` (final), `error` |
+| End | `{"type":"endStream"}`, server closes with 1000 |
+
+**Live verification (real requests through the deployed relay, not mocks):**
+
+- 2 s of silence: ticket issued, Meta handshake acknowledged, clean close (code 1000), ticket reuse refused.
+- Spoken test clip "What's on the table in front of me?": partial transcripts word by word, `speechStart`, `speechEnd`,
+  then `speechComplete: "What's on the table in front of me?"`, close 1000 after about 6 s, ticket reuse refused.
+- Repeat with `node --env-file=.env scripts/voice-live-check.mjs [16 kHz raw PCM file]`.
+
+### Relay architecture
+
+```
+Browser mic -> AudioWorklet (16 kHz PCM, 80 ms frames)
+  -> POST /functions/v1/openeyes-voice  (public app key)  -> single-use ticket (30 s)
+  -> WSS  /functions/v1/openeyes-voice?ticket=...         -> Supabase Edge Function
+       -> wss://api.meta.ai/v1/asr/realtime  (MODEL_API_KEY in the server-side handshake only)
+  <- ready / speechStart / transcript / speechEnd / speechComplete / error / closed
+```
+
+- One relay connection per listening turn. The microphone and the connection are closed while OpenEyes speaks, so
+  OpenEyes cannot transcribe its own replies (unless experimental voice interruption is on).
+- Only `speechComplete` is submitted as a question; partial words are only displayed.
+- Supabase Edge Functions supported the two-way WebSocket relay in testing, so no extra hosting was needed.
+
+### Browser fallback
+
+Settings > Voice conversation > Speech recognition: **Meta Voice** (default) or **Browser**. With Meta Voice, if the
+relay is unreachable, refuses a ticket (401, 429, 503), times out or drops, the same question is finished with the
+browser recognizer and a notice is shown and spoken. After 2 failures the browser is used for the rest of the
+conversation. The active recognizer is shown under the conversation status.
+
+### Security and cost controls
+
+- `MODEL_API_KEY` stays in the edge function; it is never in browser code, URLs or storage.
+- Tickets: random 256-bit, stored only as a SHA-256 hash, valid 30 s, single use (`voice_session_tickets`, RLS on, no
+  client access; functions callable only by the server).
+- Limits per client address (hashed): 60 tickets per 10 minutes and 20 minutes of audio per hour; 429 with Retry-After.
+- Per connection: 60 s maximum, 10 s handshake timeout, frames up to 200 ms, audio no more than 3 s ahead of real time,
+  4 s pre-ready buffer. Violations close the connection.
+- Ticket requests must carry this project's public app key.
+- No audio or transcripts are stored or logged; the server logs only audio duration and outcome. Meta error details are
+  not passed to the browser.
+
+### Still to test on a real Android phone
+
+1. Start Voice Conversation, ask "What's around me?", wait for the full answer, then ask "What's on my left?" without
+   tapping. Repeat with a long description (over 30 seconds of speech).
+2. Pause and resume during speech (if the system interrupts), and Stop conversation during speech: the microphone
+   indicator must turn off and listening must not resume.
+3. Meta Voice latency (timing details: First words, Final words, Speech length, Listening again).
+4. Fallback: turn off mobile data during listening; the browser should take over with a notice.
+5. TalkBack on and off, phone speaker and headphones.
+6. Microphone indicator after stop, leaving the app and locking the screen.
 
 ## Meta AI integration (Phase 2)
 
@@ -475,6 +570,21 @@ Manual testing with TalkBack and VoiceOver on physical devices is still required
 
 ## Test results
 
+Phase 4.1 (v0.4.1): `npm run typecheck` passes, `npm test` **238 tests passing in 18 files** (182 from Phase 4,
+unchanged, plus 56 new), `npm run build` succeeds. New tests cover: Android-style speech lifecycle (lost `onend`, lost
+`onstart`, never starting, long chunked replies not cut off, pause not treated as finished, replay after a dropped
+pause, stop leaving no timers, stale events ignored); the relay (documented handshake, buffering until Meta's ack,
+event whitelist, key never sent to the browser, frame size, real-time pacing, duration limit, handshake timeout,
+rejected and unreachable upstream, connection limit, cleanup on browser close); tickets and authentication (app key
+and JWT claim checks, 401, 429 with Retry-After, 503 without leaking details, hashed tickets); the Meta Voice recognizer
+(ticket in URL only, audio held until ready, partials shown but only `speechComplete` submitted, empty turns, no-speech,
+stop and abort with microphone cleanup, ticket errors, dropped connections, connection timeout, permission errors);
+browser fallback (same-turn fallback, session fallback after 2 failures, no fallback for silence, none after cancel);
+PCM resampling; two hands-free turns without a tap; no duplicate microphone sessions; stop during speech; the Talk
+button; timing metrics without words; the recognition setting. These are **mocked tests**. Separately, **real Meta
+Voice requests through the deployed relay succeeded** (see Phase 4.1). Nothing has been verified on a real Android
+phone yet.
+
 Phase 4 (v0.4.0): `npm run typecheck` passes, `npm test` **182 tests passing in 15 files** (the 148 from Phases 1-3,
 unchanged, plus 34 new), `npm run build` succeeds. The new tests use fake speech recognition, a fake voice, fake timers
 and mocked Meta responses, so they **do not prove behaviour on a real phone, microphone or speaker**. They cover: state
@@ -503,8 +613,11 @@ and UI flows on Explore, Find, Read and Assistant.
 
 - `MODEL_API_KEY` is configured and real answers were reported on Android by the project owner; Live Explore answer
   quality, latency and Meta's own rate limits have not been measured systematically.
-- Voice conversation and Live Explore use browser voices (not neural). Hands-free turns and the wake phrase depend on
-  the browser restarting speech recognition; voice interruption is experimental. Both stop in the background.
+- Voice conversation and Live Explore use browser voices (not neural). Hands-free turns depend on detecting the end of
+  browser speech on Android, which is now monitored but not yet verified on a phone; voice interruption is experimental.
+  Everything stops in the background.
+- Meta Voice opens one relay connection per question, adding about 1-3 s of connection setup before Meta is ready
+  (audio said during setup is buffered, not lost).
 - Smart Explore change detection uses word overlap between descriptions, so it can miss small changes or repeat a
   scene described in different words.
 - Find reports approximate positions in words only; it cannot measure distance and does not use SAM 3.1 yet.

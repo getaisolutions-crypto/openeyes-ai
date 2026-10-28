@@ -9,6 +9,7 @@ export const SPEECH_ERROR_MESSAGES: Record<SpeechErrorKind, string> = {
   'audio-capture': 'No microphone was found or it could not be used.',
   network: 'Voice input needs an internet connection in this browser. Please check your connection or type instead.',
   aborted: 'Listening was stopped.',
+  'service-unavailable': 'The Meta voice service is not available right now.',
   unknown: 'Voice input stopped unexpectedly. Please try again or type instead.',
 };
 

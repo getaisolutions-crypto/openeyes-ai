@@ -9,6 +9,8 @@ export type ProactiveFrequency = 'low' | 'medium' | 'high';
 export type ExploreMode = 'ask' | 'smart' | 'continuous';
 export type ExploreInterval = 8 | 12 | 20 | 30;
 export type ExploreSessionMinutes = 5 | 10 | 15;
+/** meta: Meta Muse Voice Transcribe with automatic fallback to the browser. browser: the browser's own recognition. */
+export type SpeechRecognitionChoice = 'meta' | 'browser';
 
 export interface Settings {
   theme: Theme;
@@ -30,6 +32,7 @@ export interface Settings {
   exploreSessionMinutes: ExploreSessionMinutes;
   /** Voice conversation listens again by itself after each reply. Off means tap Talk for every turn. */
   conversationHandsFree: boolean;
+  speechRecognition: SpeechRecognitionChoice;
   /** Experimental: only respond to speech that starts with "Hey OpenEyes". */
   conversationWakePhrase: boolean;
   /** Experimental: listen while OpenEyes is speaking so you can interrupt by voice. */

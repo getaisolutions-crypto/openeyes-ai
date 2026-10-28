@@ -3,6 +3,7 @@ import { Notice } from '../Notice';
 import { STATE_LABELS } from '../../services/voice/conversationStateMachine';
 import type { VoiceConversation } from '../../hooks/useVoiceConversation';
 import type { TurnMetrics } from '../../services/voice/voiceConversationEngine';
+import type { SpeechRecognizer } from '../../types/voice';
 
 interface Props {
   conversation: VoiceConversation;
@@ -13,13 +14,17 @@ interface Props {
 
 const ms = (value: number | null) => (value === null ? 'not measured' : `${Math.round(value)} ms`);
 
-function Diagnostics({ metrics }: { metrics: TurnMetrics | null }) {
+function Diagnostics({ metrics, recognizer }: { metrics: TurnMetrics | null; recognizer: SpeechRecognizer['id'] }) {
   return (
     <details className="w-full rounded-xl border-2 border-line p-3 text-left">
       <summary className="cursor-pointer font-bold">Voice timing details (testing)</summary>
       {metrics ? (
         <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-          <dt className="text-muted">Recognition</dt>
+          <dt className="text-muted">Listening with</dt>
+          <dd>{recognizer === 'meta-voice' ? 'Meta Voice' : 'Browser'}</dd>
+          <dt className="text-muted">First words</dt>
+          <dd>{ms(metrics.firstTranscriptMs)}</dd>
+          <dt className="text-muted">Final words</dt>
           <dd>{ms(metrics.recognitionMs)}</dd>
           <dt className="text-muted">Meta AI reply</dt>
           <dd>{ms(metrics.responseMs)}</dd>
@@ -27,6 +32,10 @@ function Diagnostics({ metrics }: { metrics: TurnMetrics | null }) {
           <dd>{ms(metrics.playbackStartMs)}</dd>
           <dt className="text-muted">End to end</dt>
           <dd>{ms(metrics.endToEndMs)}</dd>
+          <dt className="text-muted">Speech length</dt>
+          <dd>{ms(metrics.playbackMs)}</dd>
+          <dt className="text-muted">Listening again</dt>
+          <dd>{ms(metrics.resumeListeningMs)}</dd>
         </dl>
       ) : (
         <p className="mt-2 text-sm text-muted">No turn measured yet.</p>
@@ -73,6 +82,9 @@ export function VoiceConversationControls({ conversation, showDiagnostics, wakeP
         />
         {STATE_LABELS[state]}
       </p>
+      <p className="text-sm text-muted">
+        Speech recognition: {conversation.recognizerId === 'meta-voice' ? 'Meta Voice' : 'browser'}
+      </p>
       {conversation.interim && <p className="text-muted">{conversation.interim}</p>}
       {conversation.bargeInListening && (
         <p className="text-sm text-muted">Listening for interruptions while OpenEyes speaks (experimental).</p>
@@ -99,7 +111,7 @@ export function VoiceConversationControls({ conversation, showDiagnostics, wakeP
           <PhoneOff aria-hidden="true" className="h-6 w-6" /> Stop conversation
         </button>
       </div>
-      {showDiagnostics && <Diagnostics metrics={conversation.metrics} />}
+      {showDiagnostics && <Diagnostics metrics={conversation.metrics} recognizer={conversation.recognizerId} />}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import type { CameraProvider } from '../types/camera';
 import type { DeviceProvider } from '../types/devices';
 import type { ContactsProvider, MemoryProvider } from '../types/memory';
 import type { NeuralTTSProvider } from '../types/tts';
-import type { VoiceProvider } from '../types/voice';
+import type { SpeechRecognizer, VoiceProvider } from '../types/voice';
 import {
   createUnavailableAIProvider,
   createUnavailableObjectDetectionProvider,
@@ -17,6 +17,7 @@ import { createMetaGlassesDevice } from './devices/metaGlassesDevice';
 import { createPhoneCameraDevice, createPhoneMicrophoneDevice } from './devices/phoneDevices';
 import { createLocalContactsProvider } from './memory/localContactsProvider';
 import { createLocalMemoryProvider } from './memory/localMemoryProvider';
+import { createMetaVoiceRecognizer, getMetaVoiceConfigFromEnv } from './voice/metaVoiceRecognizer';
 import { createWebSpeechVoiceProvider } from './voice/webSpeechVoiceProvider';
 
 export interface Services {
@@ -24,6 +25,8 @@ export interface Services {
   vision: VisionProvider;
   objectDetection: ObjectDetectionProvider;
   voice: VoiceProvider;
+  /** Meta Muse Voice Transcribe through the OpenEyes relay. Null when the server is not configured. */
+  metaVoice: SpeechRecognizer | null;
   /** Natural voice service. Null until a provider is chosen and configured on the server; the browser voice is used meanwhile. */
   neuralTTS: NeuralTTSProvider | null;
   camera: CameraProvider;
@@ -49,10 +52,16 @@ function createAIServices(): Pick<Services, 'ai' | 'vision' | 'objectDetection'>
   return config ? createMetaProviders(createOpenEyesBackend(config)) : createUnavailableAIServices();
 }
 
+function createMetaVoice(): SpeechRecognizer | null {
+  const config = getMetaVoiceConfigFromEnv();
+  return config ? createMetaVoiceRecognizer(config) : null;
+}
+
 export function createDefaultServices(): Services {
   return {
     ...createAIServices(),
     voice: createWebSpeechVoiceProvider(),
+    metaVoice: createMetaVoice(),
     neuralTTS: null,
     camera: createBrowserCameraProvider(),
     memory: createLocalMemoryProvider(),
