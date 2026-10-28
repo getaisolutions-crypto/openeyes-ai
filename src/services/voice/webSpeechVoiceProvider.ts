@@ -23,6 +23,20 @@ function mapRecognitionError(error: string): SpeechErrorKind {
   }
 }
 
+export const SPEECH_WATCHDOG = {
+  pollMs: 250,
+  /** Consecutive polls with the speaker idle before speech counts as finished. */
+  quietPolls: 3,
+  /** Time allowed for audio to start before an idle speaker counts as finished. */
+  startGraceMs: 2500,
+  slackMs: 5000,
+} as const;
+
+/** Rough spoken duration at about 15 characters per second at normal rate. */
+export function estimateSpeechMs(text: string, rate: number) {
+  return (text.length / 15 / Math.max(rate, 0.5)) * 1000;
+}
+
 /**
  * Uses the browser's built-in Web Speech API.
  * Note: some browsers (e.g. Chrome) perform recognition on their own online service.
@@ -30,6 +44,12 @@ function mapRecognitionError(error: string): SpeechErrorKind {
 export function createWebSpeechVoiceProvider(): VoiceProvider {
   const synth = (): SpeechSynthesis | undefined =>
     typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : undefined;
+  let current: SpeechSynthesisUtterance | null = null;
+  let watchdog: ReturnType<typeof setInterval> | null = null;
+  const clearWatchdog = () => {
+    if (watchdog !== null) clearInterval(watchdog);
+    watchdog = null;
+  };
 
   return {
     id: 'browser-web-speech',
@@ -92,23 +112,65 @@ export function createWebSpeechVoiceProvider(): VoiceProvider {
     speak(text, { rate, lang, voiceURI, onStart, onEnd }) {
       const s = synth();
       if (!s) return;
+      clearWatchdog();
       s.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
+      // Chrome drops end events for utterances that are no longer referenced.
+      current = utterance;
       utterance.rate = rate;
       const chosen = voiceURI ? s.getVoices().find((v) => v.voiceURI === voiceURI) : undefined;
       if (chosen) {
         utterance.voice = chosen;
         utterance.lang = chosen.lang;
       } else if (lang) utterance.lang = lang;
-      utterance.onstart = () => onStart?.();
-      utterance.onend = () => onEnd?.();
-      utterance.onerror = () => onEnd?.();
+
+      let started = false;
+      let done = false;
+      const startedAt = Date.now();
+      const deadline = startedAt + estimateSpeechMs(text, rate) * 2 + SPEECH_WATCHDOG.slackMs;
+      let quietPolls = 0;
+      let timer: ReturnType<typeof setInterval> | null = null;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        if (watchdog === timer) clearWatchdog();
+        if (current === utterance) current = null;
+        onEnd?.();
+      };
+      const begin = () => {
+        if (started || done) return;
+        started = true;
+        onStart?.();
+      };
+      utterance.onstart = begin;
+      utterance.onend = finish;
+      utterance.onerror = finish;
       s.speak(utterance);
+
+      // Android Chrome sometimes never fires onend; confirm completion from the speaker state instead.
+      if (done) return;
+      timer = setInterval(() => {
+        if (done) return;
+        if (s.paused) return;
+        const busy = s.speaking || s.pending;
+        if (busy && !started && Date.now() - startedAt > SPEECH_WATCHDOG.startGraceMs) begin();
+        const graceOver = started || Date.now() - startedAt > SPEECH_WATCHDOG.startGraceMs;
+        quietPolls = busy ? 0 : quietPolls + 1;
+        if ((graceOver && quietPolls >= SPEECH_WATCHDOG.quietPolls) || Date.now() > deadline) {
+          s.cancel();
+          finish();
+        }
+      }, SPEECH_WATCHDOG.pollMs);
+      watchdog = timer;
     },
     getVoices: () =>
       (synth()?.getVoices() ?? []).map((v) => ({ voiceURI: v.voiceURI, name: v.name, lang: v.lang })),
     pause: () => synth()?.pause(),
     resume: () => synth()?.resume(),
-    stopSpeaking: () => synth()?.cancel(),
+    stopSpeaking: () => {
+      clearWatchdog();
+      current = null;
+      synth()?.cancel();
+    },
   };
 }
