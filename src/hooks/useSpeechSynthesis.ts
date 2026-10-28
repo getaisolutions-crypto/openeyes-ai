@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useServices } from '../services/ServicesContext';
 import { useSettings } from './useSettings';
 
@@ -9,14 +9,28 @@ export function useSpeechSynthesis() {
   const { settings } = useSettings();
   const supported = voice.isSynthesisSupported();
   const [state, setState] = useState<SpeakingState>('idle');
+  // Cancelling one utterance fires its end event late; only the latest utterance may reset the state.
+  const utteranceId = useRef(0);
 
   const speak = useCallback(
-    (text: string) => {
-      if (!supported || !text.trim()) return;
-      voice.speak(text, { rate: settings.speechRate, onEnd: () => setState('idle') });
+    (text: string, onDone?: () => void) => {
+      if (!supported || !text.trim()) {
+        onDone?.();
+        return;
+      }
+      const id = ++utteranceId.current;
+      voice.speak(text, {
+        rate: settings.speechRate,
+        voiceURI: settings.voiceURI || undefined,
+        onEnd: () => {
+          if (id !== utteranceId.current) return;
+          setState('idle');
+          onDone?.();
+        },
+      });
       setState('speaking');
     },
-    [supported, voice, settings.speechRate],
+    [supported, voice, settings.speechRate, settings.voiceURI],
   );
 
   const pause = useCallback(() => {
@@ -30,6 +44,7 @@ export function useSpeechSynthesis() {
   }, [voice]);
 
   const stop = useCallback(() => {
+    utteranceId.current++;
     voice.stopSpeaking();
     setState('idle');
   }, [voice]);

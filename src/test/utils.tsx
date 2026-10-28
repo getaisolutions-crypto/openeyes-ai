@@ -14,6 +14,7 @@ export function createFakeVoice(overrides: Partial<VoiceProvider> = {}): VoicePr
     isSynthesisSupported: () => false,
     startListening: vi.fn(() => ({ stop: vi.fn(), abort: vi.fn() })),
     speak: vi.fn(),
+    getVoices: () => [],
     pause: vi.fn(),
     resume: vi.fn(),
     stopSpeaking: vi.fn(),

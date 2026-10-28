@@ -22,7 +22,15 @@ export interface ListeningSession {
 export interface SpeakOptions {
   rate: number;
   lang?: string;
+  /** Browser voice identifier chosen in Settings. Falls back to the default voice when missing. */
+  voiceURI?: string;
   onEnd?: () => void;
+}
+
+export interface VoiceOption {
+  voiceURI: string;
+  name: string;
+  lang: string;
 }
 
 /** Speech input and output. Browser implementation today; Muse Voice Transcribe planned for Phase 2. */
@@ -32,6 +40,8 @@ export interface VoiceProvider {
   isSynthesisSupported(): boolean;
   startListening(handlers: ListeningHandlers, lang?: string): ListeningSession;
   speak(text: string, options: SpeakOptions): void;
+  /** Voices installed on the device. May be empty until the browser has loaded them. */
+  getVoices(): VoiceOption[];
   pause(): void;
   resume(): void;
   stopSpeaking(): void;

@@ -1,7 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { DEFAULT_MODEL, handleRequest } from "./core.ts";
 
-const QUOTA_LIMIT = 30;
+// Live Explore sends at most one frame every 8 seconds (75 per 10 minutes), plus questions.
+const QUOTA_LIMIT = 90;
 const QUOTA_WINDOW_SECONDS = 600;
 
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {

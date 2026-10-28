@@ -8,11 +8,13 @@ import { OptionGroup, Switch } from '../components/FormControls';
 import { useSettings } from '../hooks/useSettings';
 import { useAnnouncer } from '../hooks/useAnnouncer';
 import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
-import { SPEECH_RATE } from '../services/settings/settingsStorage';
+import { EXPLORE_INTERVALS, EXPLORE_SESSION_MINUTES, SPEECH_RATE } from '../services/settings/settingsStorage';
+import { MODE_LABELS } from '../hooks/useLiveExplore';
+import { VoiceSelect } from '../components/VoiceSelect';
 import { META_MODELS } from '../services/ai/metaModels';
 import { MetaConnectionCheck } from '../components/MetaConnectionCheck';
 import { clearAllAppData } from '../utils/storage';
-import type { AssistanceMode, ProactiveFrequency, TextSize, Theme } from '../types/settings';
+import type { AssistanceMode, ExploreMode, ProactiveFrequency, TextSize, Theme } from '../types/settings';
 import type { ResponseLength } from '../types/ai';
 
 function Section({ title, badge, children }: { title: string; badge?: ReactNode; children: ReactNode }) {
@@ -122,6 +124,49 @@ export default function SettingsPage() {
             {tts.supported ? 'Test voice' : 'Speech output not supported in this browser'}
           </button>
         </div>
+        {tts.supported && (
+          <div className="py-3">
+            <VoiceSelect />
+          </div>
+        )}
+      </Section>
+
+      <Section title="Live Explore">
+        <div className="py-3">
+          <Notice variant="info" title="Camera and data use">
+            Live Explore keeps the camera on until you stop, pause or leave the app. Only selected frames are shrunk and sent
+            securely to Meta AI through the OpenEyes server, and they are not saved. Automatic modes use mobile data.
+          </Notice>
+        </div>
+        <OptionGroup<ExploreMode>
+          legend="Default explore mode"
+          name="settings-explore-mode"
+          value={settings.exploreMode}
+          onChange={(v) => set('exploreMode', v, `Explore mode: ${MODE_LABELS[v]}.`)}
+          options={[
+            { value: 'ask', label: MODE_LABELS.ask, description: 'Nothing is sent until you ask. Recommended.' },
+            { value: 'smart', label: MODE_LABELS.smart, description: 'Checks frames regularly and speaks only when the view changes.' },
+            { value: 'continuous', label: MODE_LABELS.continuous, description: 'Checks frames regularly and describes each new view.' },
+          ]}
+        />
+        <OptionGroup<string>
+          legend="Time between automatic frames"
+          name="explore-interval"
+          columns={2}
+          value={String(settings.exploreIntervalSeconds)}
+          onChange={(v) => set('exploreIntervalSeconds', Number(v) as (typeof EXPLORE_INTERVALS)[number], `Every ${v} seconds.`)}
+          description="Longer gaps use less data. 8 seconds is the fastest allowed."
+          options={EXPLORE_INTERVALS.map((s) => ({ value: String(s), label: `${s} seconds` }))}
+        />
+        <OptionGroup<string>
+          legend="Session limit"
+          name="explore-session"
+          columns={2}
+          value={String(settings.exploreSessionMinutes)}
+          onChange={(v) => set('exploreSessionMinutes', Number(v) as (typeof EXPLORE_SESSION_MINUTES)[number], `Sessions stop after ${v} minutes.`)}
+          description="Live Explore stops by itself after this time, or after 60 frames, to protect your battery, data and privacy."
+          options={EXPLORE_SESSION_MINUTES.map((m) => ({ value: String(m), label: `${m} minutes` }))}
+        />
       </Section>
 
       <Section title="Assistant">
@@ -216,13 +261,14 @@ export default function SettingsPage() {
       <Section title="Camera and microphone permissions">
         <div className="space-y-2 py-3 text-ink/90">
           <p>
-            <strong>Camera:</strong> requested only when you press Turn on camera on Explore, Find or Read. The camera turns
-            off when you capture a photo or leave the screen.
+            <strong>Camera:</strong> requested only when you press Turn on camera or Start exploring. Single-photo screens turn
+            the camera off when you capture a photo or leave the screen. Live Explore turns it off when you stop, when the
+            session limit is reached or when OpenEyes leaves the screen.
           </p>
           <p>
             <strong>Photos and AI:</strong> a photo leaves this device only when you press a button such as Describe,
-            Find, Read or Send with a photo attached. It is shrunk and sent to Meta AI through the OpenEyes server, and
-            OpenEyes does not store it there.
+            Find, Read or Send with a photo attached, or while Live Explore is running. It is shrunk and sent to Meta AI
+            through the OpenEyes server, and OpenEyes does not store it there.
           </p>
           <p>
             <strong>Microphone:</strong> requested only when you start voice input, and used only while listening.

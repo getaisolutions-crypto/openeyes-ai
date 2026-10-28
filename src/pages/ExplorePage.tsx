@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { ScanEye, Sparkles } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { CameraCapture } from '../components/CameraCapture';
+import { LiveExplorePanel } from '../components/explore/LiveExplorePanel';
 import { Notice } from '../components/Notice';
 import { AIPending, SafetyNote, SpeechControls } from '../components/AIResult';
 import { useServices } from '../services/ServicesContext';
@@ -19,6 +20,7 @@ export default function ExplorePage() {
   const request = useAIRequest<SceneDescription>();
   const { reset } = request;
   const [image, setImage] = useState<CapturedImage | null>(null);
+  const [liveActive, setLiveActive] = useState(false);
   const status = vision.getStatus();
   const pending = request.state.status === 'pending';
 
@@ -44,10 +46,26 @@ export default function ExplorePage() {
       <PageHeader
         title="Explore"
         icon={<ScanEye className="h-7 w-7" />}
-        description="Take a photo of what is around you and OpenEyes will describe it."
+        description="Explore live with the camera, or take a single photo and OpenEyes will describe it."
       />
 
-      <CameraCapture subject="your surroundings" onImageChange={onImageChange} />
+      <LiveExplorePanel onActiveChange={setLiveActive} />
+      <SafetyNote />
+
+      <h2 className="mt-8 text-xl font-bold">Single photo</h2>
+      <p className="mt-1 text-muted">Take one photo and get one description. Works without keeping the camera on.</p>
+
+      {liveActive ? (
+        <div className="mt-4">
+          <Notice variant="info" title="Single photo is paused">
+            Live Explore is using the camera. Stop exploring to take a single photo.
+          </Notice>
+        </div>
+      ) : (
+        <div className="mt-4">
+          <CameraCapture subject="your surroundings" onImageChange={onImageChange} />
+        </div>
+      )}
 
       <div className="mt-4 space-y-4">
         <button

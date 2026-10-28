@@ -75,17 +75,23 @@ export function createWebSpeechVoiceProvider(): VoiceProvider {
       };
     },
 
-    speak(text, { rate, lang, onEnd }) {
+    speak(text, { rate, lang, voiceURI, onEnd }) {
       const s = synth();
       if (!s) return;
       s.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = rate;
-      if (lang) utterance.lang = lang;
+      const chosen = voiceURI ? s.getVoices().find((v) => v.voiceURI === voiceURI) : undefined;
+      if (chosen) {
+        utterance.voice = chosen;
+        utterance.lang = chosen.lang;
+      } else if (lang) utterance.lang = lang;
       utterance.onend = () => onEnd?.();
       utterance.onerror = () => onEnd?.();
       s.speak(utterance);
     },
+    getVoices: () =>
+      (synth()?.getVoices() ?? []).map((v) => ({ voiceURI: v.voiceURI, name: v.name, lang: v.lang })),
     pause: () => synth()?.pause(),
     resume: () => synth()?.resume(),
     stopSpeaking: () => synth()?.cancel(),

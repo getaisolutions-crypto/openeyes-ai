@@ -1,4 +1,4 @@
-import type { Settings } from '../../types/settings';
+import type { ExploreInterval, ExploreSessionMinutes, Settings } from '../../types/settings';
 import { STORAGE_KEYS, readJSON, writeJSON } from '../../utils/storage';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -14,7 +14,17 @@ export const DEFAULT_SETTINGS: Settings = {
   assistanceMode: 'reactive',
   proactiveFrequency: 'low',
   quietMode: false,
+  voiceURI: '',
+  exploreMode: 'ask',
+  exploreIntervalSeconds: 8,
+  exploreSessionMinutes: 10,
 };
+
+export const EXPLORE_INTERVALS: readonly ExploreInterval[] = [8, 12, 20, 30];
+export const EXPLORE_SESSION_MINUTES: readonly ExploreSessionMinutes[] = [5, 10, 15];
+
+const oneOfNumber = <T extends number>(value: unknown, options: readonly T[], fallback: T): T =>
+  options.includes(value as T) ? (value as T) : fallback;
 
 export const SPEECH_RATE = { min: 0.5, max: 2, step: 0.1 } as const;
 
@@ -42,6 +52,10 @@ export function sanitizeSettings(raw: unknown): Settings {
     assistanceMode: oneOf(s.assistanceMode, ['reactive', 'reactive-proactive'] as const, d.assistanceMode),
     proactiveFrequency: oneOf(s.proactiveFrequency, ['low', 'medium', 'high'] as const, d.proactiveFrequency),
     quietMode: bool(s.quietMode, d.quietMode),
+    voiceURI: typeof s.voiceURI === 'string' && s.voiceURI.length <= 500 ? s.voiceURI : d.voiceURI,
+    exploreMode: oneOf(s.exploreMode, ['ask', 'smart', 'continuous'] as const, d.exploreMode),
+    exploreIntervalSeconds: oneOfNumber(s.exploreIntervalSeconds, EXPLORE_INTERVALS, d.exploreIntervalSeconds),
+    exploreSessionMinutes: oneOfNumber(s.exploreSessionMinutes, EXPLORE_SESSION_MINUTES, d.exploreSessionMinutes),
   };
 }
 

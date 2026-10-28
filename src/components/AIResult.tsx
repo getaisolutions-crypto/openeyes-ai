@@ -56,8 +56,9 @@ export function SafetyNote() {
     <p className="mt-4 flex gap-2 text-sm text-muted">
       <ShieldAlert aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
       <span>
-        AI descriptions can be wrong and come from a single photo. Do not use them to judge traffic, steps, drop-offs or
-        obstacles. Keep using your cane, guide dog or mobility skills.
+        AI descriptions can be wrong and only reflect what the camera captured. Directions such as left or right mean
+        the side of the camera view, and distances are not measured. Do not use them to judge traffic, steps, drop-offs
+        or obstacles. Keep using your cane, guide dog or mobility skills.
       </span>
     </p>
   );
