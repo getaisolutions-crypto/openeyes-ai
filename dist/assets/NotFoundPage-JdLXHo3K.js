@@ -1,0 +1,1 @@
+import{j as e,P as t,o}from"./index-CUlGjYkp.js";function a(){return e.jsxs(e.Fragment,{children:[e.jsx(t,{title:"Page not found",description:"This page does not exist."}),e.jsx(o,{to:"/",className:"btn-primary",children:"Go to Home"})]})}export{a as default};
