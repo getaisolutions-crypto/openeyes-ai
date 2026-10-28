@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { NAV_ITEMS } from './navigation';
 import { LogoMark } from './LogoMark';
+import { MobileNav } from './MobileNav';
 
 function PageLoading() {
   return (
@@ -71,38 +72,7 @@ export function AppLayout() {
           </Suspense>
         </main>
 
-        <nav
-          aria-label="Main"
-          className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
-        >
-          <ul className="mx-auto grid max-w-2xl grid-cols-5">
-            {NAV_ITEMS.filter((item) => item.primary).map(({ to, label, icon: Icon }) => (
-              <li key={to}>
-                <NavLink
-                  to={to}
-                  end={to === '/'}
-                  className={({ isActive }) =>
-                    `flex min-h-[64px] flex-col items-center justify-center gap-1 px-1 text-xs transition-colors ${
-                      isActive ? 'font-bold text-primary' : 'text-muted hover:text-ink'
-                    }`
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      <span
-                        aria-hidden="true"
-                        className={`grid h-8 w-14 place-items-center rounded-full transition-colors ${isActive ? 'bg-primary/20' : ''}`}
-                      >
-                        <Icon className="h-6 w-6" />
-                      </span>
-                      {label}
-                    </>
-                  )}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <MobileNav />
       </div>
     </div>
   );
