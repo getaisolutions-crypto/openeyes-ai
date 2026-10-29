@@ -8,6 +8,7 @@ import ai.openeyes.glasses.core.GlassesPort
 import ai.openeyes.glasses.core.GlassesStatus
 import ai.openeyes.glasses.core.Registration
 import ai.openeyes.glasses.core.SessionPhase
+import ai.openeyes.glasses.AndroidDiagnosticLog as AndroidLog
 import android.app.Activity
 import android.content.Context
 import com.meta.wearable.dat.camera.Camera
@@ -27,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,6 +51,9 @@ class WearablesController(private val appContext: Context, private val scope: Co
     private var session: DeviceSession? = null
     private val sessionJobs = mutableListOf<Job>()
     private val captureLock = Mutex()
+    private var camera: Camera? = null
+    private var cameraUsedOnSession = false
+    private var idleJob: Job? = null
 
     /** Call after the Bluetooth permission has been granted. Safe to call more than once. */
     fun initialize() {
@@ -113,6 +118,7 @@ class WearablesController(private val appContext: Context, private val scope: Co
     }
 
     fun disconnect() {
+        releaseCamera()
         val current = session ?: return
         _status.update { it.copy(session = SessionPhase.STOPPING) }
         current.stop()
@@ -144,6 +150,10 @@ class WearablesController(private val appContext: Context, private val scope: Co
         val jobs = sessionJobs.toList()
         sessionJobs.clear()
         session = null
+        // Capabilities end with their session; a new session starts with no camera attached.
+        camera = null
+        cameraUsedOnSession = false
+        idleJob?.cancel()
         _status.update { it.copy(camera = CameraPhase.OFF) }
         jobs.forEach { it.cancel() }
     }
@@ -151,51 +161,130 @@ class WearablesController(private val appContext: Context, private val scope: Co
     override suspend fun captureJpeg(): CaptureOutcome {
         if (!captureLock.tryLock()) return CaptureOutcome.Failed(CaptureFailure.BUSY)
         try {
-            val current = session
-            if (current == null || !_status.value.connected) return CaptureOutcome.Failed(CaptureFailure.NOT_CONNECTED)
-            refreshCameraPermission()
+            idleJob?.cancel()
+            if (session == null || !_status.value.connected) return CaptureOutcome.Failed(CaptureFailure.NOT_CONNECTED)
+            // The permission is re-checked whenever the stream has to be started, not on every photo.
+            if (camera == null) refreshCameraPermission()
             if (_status.value.cameraPermission != CameraPermission.GRANTED) {
                 return CaptureOutcome.Failed(CaptureFailure.PERMISSION_DENIED)
             }
-
-            var camera: Camera? = null
-            var addError: String? = null
-            current.addCamera(StreamConfiguration(videoQuality = VideoQuality.MEDIUM, frameRate = 15))
-                .onSuccess { camera = it }
-                .onFailure { error, _ -> addError = error.description }
-            val cam = camera ?: return CaptureOutcome.Failed(CaptureFailure.CAMERA_UNAVAILABLE, addError)
-
-            _status.update { it.copy(camera = CameraPhase.STARTING) }
-            try {
-                return captureFrom(cam)
-            } finally {
-                withContext(NonCancellable) {
-                    // A stopped camera cannot restart; removing it lets the next capture add a fresh one.
-                    cam.stop()
-                    current.removeCamera()
-                    _status.update { it.copy(camera = CameraPhase.OFF) }
-                }
+            val cam = camera ?: when (val opened = openCamera(allowRecovery = true)) {
+                is Opened.Ready -> opened.camera
+                is Opened.Failed -> return opened.outcome
             }
+            val outcome = takePhoto(cam)
+            // A failed in-stream capture usually means the stream ended; start a fresh one next time.
+            if (outcome is CaptureOutcome.Failed) closeCamera()
+            return outcome
         } finally {
             captureLock.unlock()
+            scheduleIdleRelease()
         }
     }
 
-    // capturePhoto() only works while the stream is running, so the stream runs just long enough for one photo.
-    private suspend fun captureFrom(cam: Camera): CaptureOutcome {
+    override fun releaseCamera() {
+        idleJob?.cancel()
+        scope.launch(NonCancellable) { closeCamera() }
+    }
+
+    private fun scheduleIdleRelease() {
+        idleJob?.cancel()
+        if (camera == null) return
+        idleJob = scope.launch {
+            delay(CAMERA_IDLE_MS)
+            // Never stop the stream underneath a photo that started just as the idle period ran out.
+            if (captureLock.tryLock()) {
+                try {
+                    closeCamera()
+                } finally {
+                    captureLock.unlock()
+                }
+            }
+        }
+    }
+
+    private suspend fun closeCamera() {
+        val cam = camera ?: return
+        camera = null
+        AndroidLog.log("camera: stream stopped")
+        cam.stop()
+        _status.update { it.copy(camera = CameraPhase.OFF) }
+    }
+
+    private sealed interface Opened {
+        class Ready(val camera: Camera) : Opened
+        class Failed(val outcome: CaptureOutcome.Failed) : Opened
+    }
+
+    /**
+     * Adds the camera and starts its stream. capturePhoto() only works while the stream runs, so the stream is kept
+     * running between photos. A stopped camera cannot restart; if the toolkit refuses to add another one on the same
+     * session, the device session is restarted once (only documented toolkit calls are used for that).
+     */
+    private suspend fun openCamera(allowRecovery: Boolean): Opened {
+        val current = session ?: return Opened.Failed(CaptureOutcome.Failed(CaptureFailure.NOT_CONNECTED))
+        val reopening = cameraUsedOnSession
+        var added: Camera? = null
+        var addError: String? = null
+        current.addCamera(StreamConfiguration(videoQuality = VideoQuality.MEDIUM, frameRate = 15))
+            .onSuccess { added = it }
+            .onFailure { error, _ -> addError = error.description }
+        val cam = added
+        if (cam == null) {
+            if (allowRecovery && reopening && restartSession()) return openCamera(allowRecovery = false)
+            return Opened.Failed(CaptureOutcome.Failed(CaptureFailure.CAMERA_UNAVAILABLE, addError))
+        }
+        cameraUsedOnSession = true
+        _status.update { it.copy(camera = CameraPhase.STARTING) }
+
         var startError: String? = null
         cam.stream.start().onFailure { error, _ -> startError = error.description }
-        startError?.let { return CaptureOutcome.Failed(CaptureFailure.CAMERA_UNAVAILABLE, it) }
-
-        val reached = withTimeoutOrNull(STREAM_START_TIMEOUT_MS) {
-            cam.stream.state.first { it == StreamState.STREAMING || it == StreamState.CLOSED }
+        val reached = if (startError != null) {
+            null
+        } else {
+            withTimeoutOrNull(STREAM_START_TIMEOUT_MS) {
+                cam.stream.state.first { it == StreamState.STREAMING || it == StreamState.CLOSED }
+            }
         }
-        when (reached) {
-            null -> return CaptureOutcome.Failed(CaptureFailure.TIMEOUT)
-            StreamState.STREAMING -> _status.update { it.copy(camera = CameraPhase.STREAMING) }
-            else -> return CaptureOutcome.Failed(CaptureFailure.CAMERA_UNAVAILABLE, "Camera stream closed")
+        if (reached != StreamState.STREAMING) {
+            withContext(NonCancellable) {
+                cam.stop()
+                _status.update { it.copy(camera = CameraPhase.OFF) }
+            }
+            if (allowRecovery && reopening && restartSession()) return openCamera(allowRecovery = false)
+            val failure = when {
+                startError != null -> CaptureOutcome.Failed(CaptureFailure.CAMERA_UNAVAILABLE, startError)
+                reached == null -> CaptureOutcome.Failed(CaptureFailure.TIMEOUT)
+                else -> CaptureOutcome.Failed(CaptureFailure.CAMERA_UNAVAILABLE, "Camera stream closed")
+            }
+            return Opened.Failed(failure)
         }
+        camera = cam
+        AndroidLog.log("camera: stream running")
+        _status.update { it.copy(camera = CameraPhase.STREAMING) }
+        return Opened.Ready(cam)
+    }
 
+    /** Stops and recreates the device session. Status announcements are suppressed while this runs. */
+    private suspend fun restartSession(): Boolean {
+        val old = session ?: return false
+        AndroidLog.log("camera: re-adding refused, restarting device session")
+        _status.update { it.copy(recoveringCamera = true) }
+        try {
+            old.stop()
+            withTimeoutOrNull(SESSION_STOP_TIMEOUT_MS) {
+                _status.first { it.session == SessionPhase.STOPPED || it.session == SessionPhase.NONE }
+            } ?: return false
+            connect()
+            return withTimeoutOrNull(SESSION_START_TIMEOUT_MS) {
+                _status.first { it.connected || it.session == SessionPhase.STOPPED }
+            }?.connected == true
+        } finally {
+            _status.update { it.copy(recoveringCamera = false) }
+        }
+    }
+
+    private suspend fun takePhoto(cam: Camera): CaptureOutcome {
         var photo: PhotoData? = null
         var captureError: String? = null
         cam.stream.capturePhoto()
@@ -211,5 +300,9 @@ class WearablesController(private val appContext: Context, private val scope: Co
 
     private companion object {
         const val STREAM_START_TIMEOUT_MS = 12_000L
+        const val SESSION_STOP_TIMEOUT_MS = 8_000L
+        const val SESSION_START_TIMEOUT_MS = 20_000L
+        /** Longer than the slowest Explore interval, so continuous modes keep one stream running. */
+        const val CAMERA_IDLE_MS = 20_000L
     }
 }

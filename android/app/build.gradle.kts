@@ -61,8 +61,8 @@ android {
         // The Device Access Toolkit supports Android 10 (API 29) and newer.
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.6.0"
+        versionCode = 2
+        versionName = "0.7.0"
 
         // Developer Mode in the Meta AI app accepts 0 for both values; production needs Wearables Developer Center values.
         manifestPlaceholders["mwdat_application_id"] = localProp("mwdat.applicationId", "0")

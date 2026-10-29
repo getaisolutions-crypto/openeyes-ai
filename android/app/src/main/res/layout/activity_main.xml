@@ -1,118 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- One screen is visible at a time; MainActivity switches them so the glasses connection is shared. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:layout_height="match_parent">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="24dp">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:accessibilityHeading="true"
-            android:text="@string/title"
-            android:textColor="@color/on_surface"
-            android:textSize="28sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/setup_notice"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@color/surface_raised"
-            android:padding="16dp"
-            android:text="@string/setup_notice"
-            android:textColor="@color/warning"
-            android:textSize="18sp"
-            android:visibility="gone" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:accessibilityHeading="true"
-            android:text="@string/status_heading"
-            android:textColor="@color/on_surface_muted"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <TextView android:id="@+id/connection_status" style="@style/OpenEyes.Status" />
-        <TextView android:id="@+id/camera_status" style="@style/OpenEyes.Status" />
-        <TextView android:id="@+id/session_status" style="@style/OpenEyes.Status" />
-
-        <TextView
-            android:id="@+id/error_text"
-            style="@style/OpenEyes.Status"
-            android:textColor="@color/warning"
-            android:visibility="gone" />
-
-        <Button
-            android:id="@+id/look_button"
-            style="@style/OpenEyes.Button.Primary"
-            android:layout_marginTop="24dp"
-            android:text="@string/look" />
-
-        <Button
-            android:id="@+id/ask_button"
-            style="@style/OpenEyes.Button"
-            android:text="@string/ask" />
-
-        <Button
-            android:id="@+id/stop_button"
-            style="@style/OpenEyes.Button.Danger"
-            android:contentDescription="@string/stop_description"
-            android:text="@string/stop" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:accessibilityHeading="true"
-            android:text="@string/answer_heading"
-            android:textColor="@color/on_surface_muted"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/answer_text"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:background="@color/surface_raised"
-            android:lineSpacingMultiplier="1.4"
-            android:padding="16dp"
-            android:textColor="@color/on_surface"
-            android:textIsSelectable="true"
-            android:textSize="20sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:lineSpacingMultiplier="1.4"
-            android:text="@string/safety_note"
-            android:textColor="@color/on_surface_muted"
-            android:textSize="16sp" />
-
-        <Button
-            android:id="@+id/connect_button"
-            style="@style/OpenEyes.Button"
-            android:layout_marginTop="32dp"
-            android:text="@string/connect" />
-
-        <Button
-            android:id="@+id/permission_button"
-            style="@style/OpenEyes.Button"
-            android:text="@string/allow_camera" />
-
-        <Button
-            android:id="@+id/register_button"
-            style="@style/OpenEyes.Button"
-            android:text="@string/register" />
-    </LinearLayout>
-</ScrollView>
+    <include android:id="@+id/screen_home" layout="@layout/screen_home" />
+    <include android:id="@+id/screen_explore" layout="@layout/screen_explore" android:visibility="gone" />
+    <include android:id="@+id/screen_find" layout="@layout/screen_find" android:visibility="gone" />
+    <include android:id="@+id/screen_read" layout="@layout/screen_read" android:visibility="gone" />
+    <include android:id="@+id/screen_ask" layout="@layout/screen_ask" android:visibility="gone" />
+</FrameLayout>

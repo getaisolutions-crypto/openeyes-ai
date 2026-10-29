@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/OpenEyes.Screen">
+
+    <LinearLayout style="@style/OpenEyes.Column">
+
+        <TextView style="@style/OpenEyes.Title" android:text="@string/title" />
+
+        <TextView
+            android:id="@+id/setup_notice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@color/surface_raised"
+            android:padding="16dp"
+            android:text="@string/setup_notice"
+            android:textColor="@color/warning"
+            android:textSize="18sp"
+            android:visibility="gone" />
+
+        <TextView android:id="@+id/glasses_line" style="@style/OpenEyes.Status" android:layout_marginTop="16dp" />
+        <TextView android:id="@+id/camera_line" style="@style/OpenEyes.Status" />
+        <TextView android:id="@+id/ai_line" style="@style/OpenEyes.Status" />
+
+        <Button
+            android:id="@+id/ai_retry_button"
+            style="@style/OpenEyes.Button"
+            android:text="@string/ai_retry"
+            android:visibility="gone" />
+
+        <TextView style="@style/OpenEyes.Section" android:text="@string/features_heading" />
+
+        <Button
+            android:id="@+id/explore_button"
+            style="@style/OpenEyes.Button.Feature"
+            android:contentDescription="@string/feature_explore_description"
+            android:text="@string/feature_explore" />
+
+        <Button
+            android:id="@+id/find_button"
+            style="@style/OpenEyes.Button.Feature"
+            android:contentDescription="@string/feature_find_description"
+            android:text="@string/feature_find" />
+
+        <Button
+            android:id="@+id/read_button"
+            style="@style/OpenEyes.Button.Feature"
+            android:contentDescription="@string/feature_read_description"
+            android:text="@string/feature_read" />
+
+        <Button
+            android:id="@+id/ask_openeyes_button"
+            style="@style/OpenEyes.Button.Feature"
+            android:contentDescription="@string/feature_ask_description"
+            android:text="@string/feature_ask" />
+
+        <TextView style="@style/OpenEyes.Section" android:text="@string/quick_heading" />
+
+        <Button
+            android:id="@+id/look_button"
+            style="@style/OpenEyes.Button"
+            android:text="@string/look" />
+
+        <Button
+            android:id="@+id/ask_button"
+            style="@style/OpenEyes.Button"
+            android:text="@string/ask" />
+
+        <Button
+            android:id="@+id/stop_button"
+            style="@style/OpenEyes.Button.Danger"
+            android:contentDescription="@string/stop_description"
+            android:text="@string/stop" />
+
+        <TextView style="@style/OpenEyes.Section" android:layout_marginTop="16dp" android:text="@string/answer_heading" />
+
+        <TextView android:id="@+id/answer_text" style="@style/OpenEyes.Panel" />
+
+        <TextView style="@style/OpenEyes.Note" android:text="@string/safety_note" />
+
+        <TextView style="@style/OpenEyes.Section" android:text="@string/setup_heading" />
+
+        <TextView android:id="@+id/connection_status" style="@style/OpenEyes.Status" />
+        <TextView android:id="@+id/camera_status" style="@style/OpenEyes.Status" />
+        <TextView android:id="@+id/session_status" style="@style/OpenEyes.Status" />
+
+        <TextView android:id="@+id/error_text" style="@style/OpenEyes.Error" />
+
+        <Button
+            android:id="@+id/connect_button"
+            style="@style/OpenEyes.Button"
+            android:text="@string/connect" />
+
+        <Button
+            android:id="@+id/permission_button"
+            style="@style/OpenEyes.Button"
+            android:text="@string/allow_camera" />
+
+        <Button
+            android:id="@+id/register_button"
+            style="@style/OpenEyes.Button"
+            android:text="@string/register" />
+    </LinearLayout>
+</ScrollView>

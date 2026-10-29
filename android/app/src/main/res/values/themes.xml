@@ -42,4 +42,89 @@
         <item name="android:textColor">@color/on_danger</item>
         <item name="backgroundTint">@color/danger</item>
     </style>
+
+    <!-- Home screen feature buttons: the largest touch targets in the app. -->
+    <style name="OpenEyes.Button.Feature" parent="OpenEyes.Button.Primary">
+        <item name="android:minHeight">104dp</item>
+        <item name="android:gravity">start|center_vertical</item>
+        <item name="android:paddingHorizontal">24dp</item>
+    </style>
+
+    <style name="OpenEyes.Screen" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:fillViewport">true</item>
+    </style>
+
+    <style name="OpenEyes.Column" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:padding">24dp</item>
+    </style>
+
+    <style name="OpenEyes.Title" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:accessibilityHeading">true</item>
+        <item name="android:textColor">@color/on_surface</item>
+        <item name="android:textSize">30sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="OpenEyes.Section" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">32dp</item>
+        <item name="android:accessibilityHeading">true</item>
+        <item name="android:textColor">@color/on_surface_muted</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="OpenEyes.Panel" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:background">@color/surface_raised</item>
+        <item name="android:lineSpacingMultiplier">1.4</item>
+        <item name="android:padding">16dp</item>
+        <item name="android:textColor">@color/on_surface</item>
+        <item name="android:textIsSelectable">true</item>
+        <item name="android:textSize">20sp</item>
+    </style>
+
+    <style name="OpenEyes.Note" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:lineSpacingMultiplier">1.4</item>
+        <item name="android:textColor">@color/on_surface_muted</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="OpenEyes.Error" parent="OpenEyes.Status">
+        <item name="android:textColor">@color/warning</item>
+        <item name="android:accessibilityLiveRegion">assertive</item>
+        <item name="android:visibility">gone</item>
+    </style>
+
+    <style name="OpenEyes.Input" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:minHeight">64dp</item>
+        <item name="android:background">@color/surface_raised</item>
+        <item name="android:padding">16dp</item>
+        <item name="android:textColor">@color/on_surface</item>
+        <item name="android:textColorHint">@color/on_surface_muted</item>
+        <item name="android:textSize">20sp</item>
+    </style>
+
+    <style name="OpenEyes.Back" parent="OpenEyes.Button">
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:textSize">20sp</item>
+    </style>
 </resources>

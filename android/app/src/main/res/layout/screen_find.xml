@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/OpenEyes.Screen">
+
+    <LinearLayout style="@style/OpenEyes.Column">
+
+        <Button
+            android:id="@+id/find_back"
+            style="@style/OpenEyes.Back"
+            android:contentDescription="@string/back_description"
+            android:text="@string/back" />
+
+        <TextView style="@style/OpenEyes.Title" android:layout_marginTop="16dp" android:text="@string/find_title" />
+
+        <TextView android:id="@+id/find_status" style="@style/OpenEyes.Status" android:layout_marginTop="8dp" />
+        <TextView android:id="@+id/find_error" style="@style/OpenEyes.Error" />
+
+        <TextView
+            android:id="@+id/find_target_label"
+            style="@style/OpenEyes.Section"
+            android:layout_marginTop="16dp"
+            android:labelFor="@id/find_input"
+            android:text="@string/find_target_label" />
+
+        <EditText
+            android:id="@+id/find_input"
+            style="@style/OpenEyes.Input"
+            android:hint="@string/find_target_hint"
+            android:imeOptions="actionSearch"
+            android:importantForAutofill="no"
+            android:inputType="textCapSentences"
+            android:maxLength="80" />
+
+        <Button
+            android:id="@+id/find_mic"
+            style="@style/OpenEyes.Button"
+            android:contentDescription="@string/mic_description"
+            android:text="@string/mic" />
+
+        <TextView android:id="@+id/find_target" style="@style/OpenEyes.Status" android:layout_marginTop="16dp" android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/find_toggle"
+            style="@style/OpenEyes.Button.Primary"
+            android:text="@string/find_start" />
+
+        <TextView style="@style/OpenEyes.Section" android:text="@string/find_result_heading" />
+        <TextView
+            android:id="@+id/find_verdict"
+            style="@style/OpenEyes.Status"
+            android:textSize="24sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/find_result"
+            style="@style/OpenEyes.Panel"
+            android:accessibilityLiveRegion="polite"
+            android:text="@string/find_placeholder" />
+
+        <Button
+            android:id="@+id/find_stop_speaking"
+            style="@style/OpenEyes.Button.Danger"
+            android:text="@string/stop_speaking" />
+
+        <TextView style="@style/OpenEyes.Note" android:text="@string/find_note" />
+    </LinearLayout>
+</ScrollView>

@@ -17,6 +17,8 @@ data class GlassesStatus(
     val camera: CameraPhase = CameraPhase.OFF,
     val cameraPermission: CameraPermission = CameraPermission.UNKNOWN,
     val error: String? = null,
+    /** The controller is restarting the device session to get a fresh camera; not a user-visible disconnect. */
+    val recoveringCamera: Boolean = false,
 ) {
     /** True only after the toolkit reported the device session as started. */
     val connected: Boolean get() = session == SessionPhase.ACTIVE
@@ -32,6 +34,7 @@ object StatusText {
     fun connection(s: GlassesStatus): String = when {
         !s.sdkReady -> "Glasses toolkit not ready"
         s.registration != Registration.REGISTERED -> "Not registered with Meta AI"
+        s.recoveringCamera -> "Restarting the glasses camera"
         s.session == SessionPhase.STARTING -> "Connecting to glasses"
         s.session == SessionPhase.PAUSED -> "Glasses session paused"
         s.connected -> "Glasses connected"
@@ -54,8 +57,18 @@ object StatusText {
         SessionPhase.NONE, SessionPhase.STOPPED -> "Session stopped"
     }
 
+    /**
+     * A real disconnect ends any camera feature at once. A pause (glasses taken off, cap-touch) can resume by itself,
+     * and the controller's own camera restart is not a disconnect, so neither stops a feature.
+     */
+    fun endsCameraModes(old: GlassesStatus, new: GlassesStatus): Boolean =
+        !old.recoveringCamera && !new.recoveringCamera &&
+            (old.connected || old.session == SessionPhase.PAUSED) &&
+            new.session in setOf(SessionPhase.NONE, SessionPhase.STOPPING, SessionPhase.STOPPED)
+
     /** Spoken only for changes a blind user needs to know about, not for every internal step. */
     fun announcement(old: GlassesStatus, new: GlassesStatus): String? = when {
+        old.recoveringCamera || new.recoveringCamera -> null
         !old.connected && new.connected -> "Glasses connected."
         old.connected && new.session == SessionPhase.PAUSED -> "Glasses paused. They may have been taken off or folded."
         old.connected && !new.connected -> "Glasses disconnected."

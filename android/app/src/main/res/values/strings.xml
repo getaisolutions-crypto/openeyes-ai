@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">OpenEyes Glasses</string>
-    <string name="title">OpenEyes for Ray-Ban Meta</string>
+    <string name="title">OpenEyes AI</string>
     <string name="status_heading">Glasses status</string>
     <string name="answer_heading">Last answer</string>
     <string name="answer_placeholder">No answer yet. Connect the glasses, then press What am I looking at.</string>
@@ -23,4 +23,100 @@
     <string name="listening">Listening. Speak your question</string>
     <string name="stop">Stop</string>
     <string name="stop_description">Stop listening, cancel the request and stop speaking</string>
+
+    <!-- Home -->
+    <string name="features_heading">What would you like to do?</string>
+    <string name="quick_heading">Quick look</string>
+    <string name="setup_heading">Glasses setup</string>
+    <string name="feature_explore">Explore</string>
+    <string name="feature_explore_description">Explore. Describes what is around you and tells you about changes.</string>
+    <string name="feature_find">Find Objects</string>
+    <string name="feature_find_description">Find Objects. Searches the glasses view for something you name.</string>
+    <string name="feature_read">Read Text</string>
+    <string name="feature_read_description">Read Text. Reads signs, letters and labels aloud.</string>
+    <string name="feature_ask">Ask OpenEyes</string>
+    <string name="feature_ask_description">Ask OpenEyes. A spoken or typed conversation. Does not use the camera.</string>
+    <string name="glasses_line">Glasses: %1$s</string>
+    <string name="camera_line">Camera: %1$s</string>
+    <string name="ai_line">AI: %1$s</string>
+    <string name="ai_checking">Checking</string>
+    <string name="ai_ready">Ready</string>
+    <string name="ai_app_not_configured">Unavailable. This app was built without the server address</string>
+    <string name="ai_server_not_configured">Unavailable. Meta AI is not set up on the OpenEyes server</string>
+    <string name="ai_unreachable">Unavailable. Cannot reach the OpenEyes server</string>
+    <string name="ai_retry">Check AI again</string>
+
+    <!-- Shared feature controls -->
+    <string name="back">Back</string>
+    <string name="back_description">Back to the home screen. Stops this feature.</string>
+    <string name="status_label">Status: %1$s</string>
+    <string name="mic">Speak</string>
+    <string name="mic_listening">Listening…</string>
+    <string name="mic_description">Speak with the microphone</string>
+    <string name="send">Send</string>
+    <string name="stop_speaking">Stop speaking</string>
+    <string name="repeat">Repeat</string>
+    <string name="state_idle">Ready</string>
+    <string name="state_listening">Listening</string>
+    <string name="state_looking">Taking photo with glasses</string>
+    <string name="state_analyzing">Asking Meta AI</string>
+    <string name="state_waiting">Watching for changes</string>
+    <string name="state_answering">Answering your question</string>
+    <string name="state_searching_wait">Searching. Next photo shortly</string>
+    <string name="state_reading">Reading the text</string>
+    <string name="state_thinking">Meta AI is working on it</string>
+    <string name="state_speaking">Speaking</string>
+
+    <!-- Explore -->
+    <string name="explore_title">Live Explore</string>
+    <string name="explore_start">Start exploring</string>
+    <string name="explore_stop">Stop exploring</string>
+    <string name="explore_latest">Latest description</string>
+    <string name="explore_placeholder">Press Start exploring. OpenEyes takes a photo every few seconds, describes the view, and then only speaks when something changes.</string>
+    <string name="explore_ask">Ask about this view</string>
+    <string name="explore_ask_hint">Type a question about the view</string>
+    <string name="explore_note">Explore uses a series of photos a few seconds apart, not live video, so fast changes can be missed. It never says a path is clear.</string>
+
+    <!-- Find -->
+    <string name="find_title">Find Objects</string>
+    <string name="find_target_label">What are you looking for?</string>
+    <string name="find_target_hint">For example: keys, front door, red mug</string>
+    <string name="find_target">Looking for: %1$s</string>
+    <string name="find_start">Start search</string>
+    <string name="find_stop">Stop search</string>
+    <string name="find_result_heading">Result</string>
+    <string name="find_placeholder">Name an object, then press Start search and turn your head slowly.</string>
+    <string name="find_found">Found</string>
+    <string name="find_possibly">Possibly found</string>
+    <string name="find_not_detected">Not detected</string>
+    <string name="find_note">Locations are approximate, based on where the object is in the photo. OpenEyes cannot measure distance.</string>
+
+    <!-- Read -->
+    <string name="read_title">Read Text</string>
+    <string name="read_capture">Read text</string>
+    <string name="read_again_capture">Read new text</string>
+    <string name="read_original">Original text</string>
+    <string name="read_placeholder">Point the glasses at the text and press Read text. Hold it about a forearm\'s length away in good light.</string>
+    <string name="read_unreadable_note">Parts marked [unreadable] could not be made out.</string>
+    <string name="read_slower">Read slower</string>
+    <string name="read_summarize">Summarize</string>
+    <string name="read_translate">Translate</string>
+    <string name="read_language_hint">Language, for example Spanish</string>
+    <string name="read_explain">What does this mean?</string>
+    <string name="read_important">Important information only</string>
+    <string name="read_question_hint">Ask a question about the text</string>
+    <string name="read_ask">Ask</string>
+    <string name="read_clear">Clear</string>
+    <string name="read_ai_heading">From Meta AI (not the original text)</string>
+    <string name="read_note">The text is kept only while this screen is open. Nothing is saved.</string>
+
+    <!-- Ask -->
+    <string name="ask_title">Ask OpenEyes</string>
+    <string name="ask_hint">Type a message</string>
+    <string name="ask_placeholder">Ask anything. This conversation does not use the glasses camera, and works without glasses.</string>
+    <string name="ask_new">New conversation</string>
+    <string name="ask_you">You</string>
+    <string name="ask_ai">OpenEyes</string>
+    <string name="ask_failed">Not answered</string>
+    <string name="ask_note">The conversation is kept only until you start a new one or close the app.</string>
 </resources>

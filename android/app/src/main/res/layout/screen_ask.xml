@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <Button
+        android:id="@+id/ask_back"
+        style="@style/OpenEyes.Back"
+        android:contentDescription="@string/back_description"
+        android:text="@string/back" />
+
+    <TextView style="@style/OpenEyes.Title" android:layout_marginTop="16dp" android:text="@string/ask_title" />
+
+    <TextView android:id="@+id/ask_status" style="@style/OpenEyes.Status" android:layout_marginTop="8dp" />
+    <TextView android:id="@+id/ask_error" style="@style/OpenEyes.Error" />
+
+    <ScrollView
+        android:id="@+id/ask_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="8dp"
+        android:layout_weight="1"
+        android:background="@color/surface_raised">
+
+        <LinearLayout
+            android:id="@+id/ask_messages"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/ask_placeholder"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:lineSpacingMultiplier="1.4"
+                android:text="@string/ask_placeholder"
+                android:textColor="@color/on_surface_muted"
+                android:textSize="18sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <EditText
+        android:id="@+id/ask_input"
+        style="@style/OpenEyes.Input"
+        android:hint="@string/ask_hint"
+        android:imeOptions="actionSend"
+        android:importantForAutofill="no"
+        android:inputType="textCapSentences|textMultiLine"
+        android:maxLength="2000"
+        android:maxLines="4" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/ask_mic"
+            style="@style/OpenEyes.Button"
+            android:layout_width="0dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/mic_description"
+            android:text="@string/mic" />
+
+        <Button
+            android:id="@+id/ask_send"
+            style="@style/OpenEyes.Button.Primary"
+            android:layout_width="0dp"
+            android:layout_marginTop="16dp"
+            android:layout_weight="1"
+            android:minHeight="72dp"
+            android:textSize="22sp"
+            android:text="@string/send" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/ask_stop_speaking"
+            style="@style/OpenEyes.Button.Danger"
+            android:layout_width="0dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:text="@string/stop_speaking" />
+
+        <Button
+            android:id="@+id/ask_repeat"
+            style="@style/OpenEyes.Button"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:text="@string/repeat" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/ask_new"
+        style="@style/OpenEyes.Button"
+        android:text="@string/ask_new" />
+</LinearLayout>

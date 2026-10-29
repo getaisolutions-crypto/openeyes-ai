@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/OpenEyes.Screen">
+
+    <LinearLayout style="@style/OpenEyes.Column">
+
+        <Button
+            android:id="@+id/explore_back"
+            style="@style/OpenEyes.Back"
+            android:contentDescription="@string/back_description"
+            android:text="@string/back" />
+
+        <TextView style="@style/OpenEyes.Title" android:layout_marginTop="16dp" android:text="@string/explore_title" />
+
+        <TextView android:id="@+id/explore_status" style="@style/OpenEyes.Status" android:layout_marginTop="8dp" />
+        <TextView android:id="@+id/explore_error" style="@style/OpenEyes.Error" />
+
+        <Button
+            android:id="@+id/explore_toggle"
+            style="@style/OpenEyes.Button.Primary"
+            android:layout_marginTop="16dp"
+            android:text="@string/explore_start" />
+
+        <TextView style="@style/OpenEyes.Section" android:text="@string/explore_latest" />
+        <TextView
+            android:id="@+id/explore_latest"
+            style="@style/OpenEyes.Panel"
+            android:accessibilityLiveRegion="polite"
+            android:text="@string/explore_placeholder" />
+
+        <TextView style="@style/OpenEyes.Section" android:text="@string/explore_ask" />
+        <EditText
+            android:id="@+id/explore_question"
+            style="@style/OpenEyes.Input"
+            android:hint="@string/explore_ask_hint"
+            android:imeOptions="actionSend"
+            android:importantForAutofill="no"
+            android:inputType="textCapSentences"
+            android:maxLength="300" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/explore_mic"
+                style="@style/OpenEyes.Button"
+                android:layout_width="0dp"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:contentDescription="@string/mic_description"
+                android:text="@string/mic" />
+
+            <Button
+                android:id="@+id/explore_send"
+                style="@style/OpenEyes.Button"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:text="@string/send" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/explore_stop_speaking"
+            style="@style/OpenEyes.Button.Danger"
+            android:text="@string/stop_speaking" />
+
+        <TextView style="@style/OpenEyes.Note" android:text="@string/explore_note" />
+        <TextView style="@style/OpenEyes.Note" android:text="@string/safety_note" />
+    </LinearLayout>
+</ScrollView>

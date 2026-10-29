@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/OpenEyes.Screen">
+
+    <LinearLayout style="@style/OpenEyes.Column">
+
+        <Button
+            android:id="@+id/read_back"
+            style="@style/OpenEyes.Back"
+            android:contentDescription="@string/back_description"
+            android:text="@string/back" />
+
+        <TextView style="@style/OpenEyes.Title" android:layout_marginTop="16dp" android:text="@string/read_title" />
+
+        <TextView android:id="@+id/read_status" style="@style/OpenEyes.Status" android:layout_marginTop="8dp" />
+        <TextView android:id="@+id/read_error" style="@style/OpenEyes.Error" />
+
+        <Button
+            android:id="@+id/read_capture"
+            style="@style/OpenEyes.Button.Primary"
+            android:layout_marginTop="16dp"
+            android:text="@string/read_capture" />
+
+        <Button
+            android:id="@+id/read_stop"
+            style="@style/OpenEyes.Button.Danger"
+            android:contentDescription="@string/stop_description"
+            android:text="@string/stop" />
+
+        <TextView style="@style/OpenEyes.Section" android:text="@string/read_original" />
+        <TextView
+            android:id="@+id/read_text"
+            style="@style/OpenEyes.Panel"
+            android:text="@string/read_placeholder" />
+        <TextView
+            android:id="@+id/read_unreadable"
+            style="@style/OpenEyes.Note"
+            android:text="@string/read_unreadable_note"
+            android:textColor="@color/warning"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/read_actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/read_repeat"
+                    style="@style/OpenEyes.Button"
+                    android:layout_width="0dp"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:text="@string/repeat" />
+
+                <Button
+                    android:id="@+id/read_slower"
+                    style="@style/OpenEyes.Button"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:text="@string/read_slower" />
+            </LinearLayout>
+
+            <Button android:id="@+id/read_summarize" style="@style/OpenEyes.Button" android:text="@string/read_summarize" />
+            <Button android:id="@+id/read_explain" style="@style/OpenEyes.Button" android:text="@string/read_explain" />
+            <Button android:id="@+id/read_important" style="@style/OpenEyes.Button" android:text="@string/read_important" />
+
+            <EditText
+                android:id="@+id/read_language"
+                style="@style/OpenEyes.Input"
+                android:layout_marginTop="16dp"
+                android:hint="@string/read_language_hint"
+                android:importantForAutofill="no"
+                android:inputType="textCapWords"
+                android:maxLength="30" />
+            <Button android:id="@+id/read_translate" style="@style/OpenEyes.Button" android:text="@string/read_translate" />
+
+            <EditText
+                android:id="@+id/read_question"
+                style="@style/OpenEyes.Input"
+                android:layout_marginTop="16dp"
+                android:hint="@string/read_question_hint"
+                android:imeOptions="actionSend"
+                android:importantForAutofill="no"
+                android:inputType="textCapSentences"
+                android:maxLength="300" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/read_mic"
+                    style="@style/OpenEyes.Button"
+                    android:layout_width="0dp"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:contentDescription="@string/mic_description"
+                    android:text="@string/mic" />
+
+                <Button
+                    android:id="@+id/read_ask"
+                    style="@style/OpenEyes.Button"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:text="@string/read_ask" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/read_ai_heading"
+                style="@style/OpenEyes.Section"
+                android:text="@string/read_ai_heading"
+                android:visibility="gone" />
+            <TextView
+                android:id="@+id/read_ai_text"
+                style="@style/OpenEyes.Panel"
+                android:accessibilityLiveRegion="polite"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/read_clear"
+                style="@style/OpenEyes.Button"
+                android:layout_marginTop="24dp"
+                android:text="@string/read_clear" />
+        </LinearLayout>
+
+        <TextView style="@style/OpenEyes.Note" android:text="@string/read_note" />
+    </LinearLayout>
+</ScrollView>

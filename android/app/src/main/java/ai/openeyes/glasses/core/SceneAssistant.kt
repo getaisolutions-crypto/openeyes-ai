@@ -96,7 +96,7 @@ class SceneAssistant(
             speaker.speak(AssistantMessages.BUSY, SpeechKind.STATUS)
             return false
         }
-        job = scope.launch { run(question) }
+        job = scope.launch { answer(question) }
         return true
     }
 
@@ -107,7 +107,8 @@ class SceneAssistant(
         _phase.value = AssistantPhase.IDLE
     }
 
-    private suspend fun run(question: String?) {
+    /** Runs one look-and-answer in the caller's coroutine, e.g. inside CameraModeCoordinator. */
+    suspend fun answer(question: String?) {
         try {
             if (!glasses.status.value.connected) {
                 say(AssistantMessages.NOT_CONNECTED, SpeechKind.ERROR)
