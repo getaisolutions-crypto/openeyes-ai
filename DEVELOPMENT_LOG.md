@@ -1,5 +1,31 @@
 # OpenEyes AI - Development Log
 
+## 2026-10-30 - Phase 8: Ray-Ban Meta Gen 2 Android companion (v0.6.0 of the Android app)
+
+### Added
+
+- `android/`: separate Kotlin Android project (AGP 8.9.1, Kotlin 2.2.0, minSdk 29, DAT `mwdat-core` and
+  `mwdat-camera` 1.0.1 from Maven Central). Website, root `package.json` and `vite.config.ts` unchanged.
+- `WearablesController`: initialize, registration, device list, camera permission, session state and errors,
+  one-photo capture (add camera after STARTED, start stream, wait for STREAMING, `capturePhoto`, stop and remove).
+- `SceneAssistant`: one photo, then `describe` or `chat` against `openeyes-ai`, then speech; Stop discards late
+  replies; error and safety messages.
+- `OpenEyesClient`: same headers and request format as the web client; error codes mapped.
+- Android TextToSpeech output and one-shot SpeechRecognizer questions. High-contrast screen with 72-96 dp buttons
+  and live status lines.
+- JVM unit tests (assistant, status, client) with fakes.
+
+### Checks
+
+- Web: typecheck passes, 376 tests passing in 26 files, build succeeds.
+- Android: not compiled, unit tests not run (no JDK, Android SDK or Gradle available). No hardware testing.
+
+### Not verified
+
+- Import packages for `Permission`, `PermissionStatus`, `StreamState` (marked VERIFY).
+- Audio routing to the glasses speakers, microphone source, background behaviour, all real-device flows.
+- GitHub sync: not a git repository here; push via Bolt's GitHub integration.
+
 ## 2026-10-29 - Voice system repair (v0.5.1)
 
 ### Changed

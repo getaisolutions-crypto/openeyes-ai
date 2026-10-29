@@ -50,6 +50,10 @@ Requirements:
   "Meta glasses camera" source option only when the bridge reports a real connection.
 - The app must remain fully usable with only the phone.
 
+Status (Phase 8): a standalone native companion exists in `android/` (see `android/README.md`). It talks to the
+`openeyes-ai` server directly rather than hosting the web UI, so the WebView bridge above is still future work.
+It has not been compiled or tested on glasses yet.
+
 ## 3. Proactive assistance
 
 Phase 1 stores preferences only. A future implementation must be opt-in, respect quiet mode and frequency,

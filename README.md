@@ -664,12 +664,29 @@ Fixes (`voiceConversationEngine.ts`, `useVoiceConversation.ts`, `useLiveExplore.
 
 Not verified on real Android hardware. Leaving the app or locking the screen still ends the conversation on purpose.
 
+## Ray-Ban Meta glasses companion app (Phase 8, Android)
+
+A separate native Android app in `android/` (Kotlin, Meta Wearables Device Access Toolkit 1.0.1) for Ray-Ban Meta
+Gen 2 glasses on Android phones such as the Galaxy S24. It registers with the Meta AI app, starts a glasses session,
+takes one photo with the glasses camera, sends it to the existing `openeyes-ai` server function (Muse Spark) and
+speaks the answer. A spoken question can be asked with the Ask a question button (Android speech recognition).
+
+- "Connected" is shown only when the toolkit reports the session as started.
+- Photos stay in memory; no images are stored. Only the public key the website uses is in the app.
+- No wake word ("Hey OpenEyes" is not supported). Toolkit speech, audio streaming and voice invocations are
+  experimental and not used.
+- Speech plays through the phone's audio route; whether it reaches the glasses speakers is not verified.
+- **Not compiled and not tested on hardware** (no Android tooling where it was written). JVM unit tests are written
+  but have not been run.
+
+Setup, SDK findings and the exact Galaxy S24 test steps: `android/README.md`. The web build ignores this folder.
+
 ## Placeholders (not functional yet)
 
 - **SAM 3.1 segmentation** (exact object outlines). Find uses Muse Spark's description of position instead.
-- **Muse Voice Transcribe.** Evaluated in Phase 4 but not connected; voice input uses the browser speech service.
 - **Natural (neural) voices.** The interface is ready, but no voice service is connected; the browser voice is used.
-- **Meta glasses connection.** The Connect button never shows a fake success.
+- **Meta glasses connection in the website.** The Connect button never shows a fake success. Glasses support is
+  being built as a separate Android app (Phase 8, untested).
 - **Proactive assistance** beyond Live Explore. Smart Explore only speaks during a session you start; there is no background monitoring.
 
 ## Planned features (not started)
