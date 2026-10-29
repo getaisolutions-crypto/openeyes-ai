@@ -323,7 +323,7 @@ export function LiveExplorePanel({ onActiveChange }: Props) {
       <ConfirmDialog
         open={live.pendingMemory !== null}
         title="Save this memory?"
-        message={`"${live.pendingMemory ?? ''}" will be saved in My Memories on this device. You can edit or delete it later.`}
+        message={`${live.pendingMemory?.confirmPrompt ?? ''} "${live.pendingMemory?.input.text ?? ''}" will be saved in My Memories on this device. You can edit or delete it later.`}
         confirmLabel="Save memory"
         onConfirm={() => void live.confirmMemory()}
         onCancel={live.cancelMemory}

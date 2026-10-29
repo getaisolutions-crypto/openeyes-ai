@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   conversation: `${STORAGE_PREFIX}conversation.v1`,
   liveExploreConsent: `${STORAGE_PREFIX}live-explore-consent.v1`,
   voiceConversationConsent: `${STORAGE_PREFIX}voice-conversation-consent.v1`,
+  pausedTask: `${STORAGE_PREFIX}paused-task.v1`,
 } as const;
 
 export function readJSON<T>(key: string, fallback: T): T {

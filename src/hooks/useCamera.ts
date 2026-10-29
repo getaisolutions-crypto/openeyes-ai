@@ -74,6 +74,13 @@ export function useCamera() {
     setStatus(image ? 'captured' : 'idle');
   }, [image, stopStream]);
 
+  /** Grabs a frame while keeping the camera live. The caller owns the returned image and its preview URL. */
+  const captureFrame = useCallback(async (): Promise<CapturedImage | null> => {
+    const video = videoRef.current;
+    if (!video || !streamRef.current) return null;
+    return camera.capture(video);
+  }, [camera]);
+
   const setUploadedImage = useCallback(
     (next: CapturedImage) => {
       stopStream();
@@ -102,5 +109,5 @@ export function useCamera() {
 
   useReloadParticipant('Camera', false, stop);
 
-  return { videoRef, status, errorKind, image, start, capture, retake: start, stop, setUploadedImage, discard };
+  return { videoRef, status, errorKind, image, start, capture, captureFrame, retake: start, stop, setUploadedImage, discard };
 }

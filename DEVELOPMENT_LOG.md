@@ -1,5 +1,35 @@
 # OpenEyes AI - Development Log
 
+## 2026-10-29 - Phases 5, 6 and 7 (v0.5.0)
+
+### Implemented
+
+- Advanced Find: live search session (`useObjectSearch`, `LiveObjectSearch`), one frame at a time, round limit,
+  camera-relative and uncertainty wording (`objectSearch.ts`), confirmed location saving (`SaveLocationDialog`).
+- Advanced Read: Quick Read, Full Read, Ask About Text with answer basis, Read Again, Clear reading session
+  (`readingSession.ts`, `useReadingSession`, `QuickReadCard`, `DocumentQuestions`).
+- Memory: categories, subject, due date, done; consent proposals (`memoryIntent.ts`); category filter, export, clear
+  all (`MemoryPage`, `MemoryEditor`, `memoryExport.ts`). Old memories default to "note" without being rewritten.
+- Daily assistance: pure task session engine (`taskSession.ts`), `useTaskSession` (pause persisted, registered with the
+  update system), `TaskPanel`; reminder records with a stated limitation.
+- Environmental awareness: `sceneAwareness.ts` (3-minute in-memory scene context, safety filter, rate-limited
+  announcement selection), Live Explore integration, Settings section (off by default).
+- Unified: rule-based `intentRouter.ts` in the Assistant (find, read, explore, remember, reminder, where-is, task);
+  Live Explore "remember that..." with spoken yes/no consent.
+- Server (`openeyes-ai`): new tasks `quick_read`, `ask_text`, `task_plan`, `scene_check` with validation, parsers and
+  safety rules. The deploy tool reported the function already up to date.
+- Version 0.5.0.
+
+### Checks
+
+- `npm run typecheck` passes; `npm test` 360 passing in 25 files; `npm run build` succeeds. All mocked.
+
+### Not verified
+
+- No real Android device testing, no TalkBack testing, no measured Find or Read accuracy.
+- Meta segmentation or detection models (SAM) not used: official access not confirmed.
+- Not a git repository in this environment, so GitHub sync could not be checked.
+
 ## 2026-10-29 - App updates, cache control and version detection (v0.4.2)
 
 ### Root cause investigation

@@ -1,9 +1,11 @@
 import {
   AIRequestError,
   type AIProvider,
+  type AnswerBasis,
   type ConfidenceLevel,
   type ObjectDetectionProvider,
   type ObjectVisibility,
+  type SceneChangeCategory,
   type VisionProvider,
 } from '../../types/ai';
 import type { CapturedImage } from '../../types/camera';
@@ -18,6 +20,24 @@ const VISIBILITY: Record<string, ObjectVisibility> = {
   uncertain: 'uncertain',
 };
 const CONFIDENCE: ConfidenceLevel[] = ['high', 'medium', 'low'];
+const BASIS: Record<string, AnswerBasis> = {
+  exact: 'exact',
+  summary: 'summary',
+  inference: 'inference',
+  not_found: 'not-found',
+};
+const SCENE_CATEGORY: Record<string, SceneChangeCategory> = {
+  person: 'person',
+  door: 'door',
+  stairs: 'stairs',
+  new_area: 'new-area',
+  object: 'object',
+  other: 'other',
+};
+
+function stringField(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
 
 function badResponse(): never {
   throw new AIRequestError('bad-response', AI_ERROR_MESSAGES['bad-response']);
@@ -82,6 +102,13 @@ export function createMetaProviders(backend: OpenEyesBackend, encode: ImageEncod
         modelVersion: modelVersion(body),
       };
     },
+    async planTask(taskName, options) {
+      const body = await backend.post({ task: 'task_plan', taskName }, options?.signal);
+      const plan = body.plan as Record<string, unknown> | undefined;
+      if (!plan || !Array.isArray(plan.steps)) badResponse();
+      const steps = plan.steps.map(stringField).filter(Boolean);
+      return { steps, modelId: 'muse-spark', modelVersion: modelVersion(body) };
+    },
     async checkConnection(signal) {
       const health = await backend.health(signal);
       return health.configured
@@ -110,6 +137,66 @@ export function createMetaProviders(backend: OpenEyesBackend, encode: ImageEncod
       if (typeof body.readable !== 'boolean' || typeof body.text !== 'string') badResponse();
       const text = body.readable ? body.text.trim() : '';
       return { text, readable: body.readable && Boolean(text), modelId: 'muse-spark', modelVersion: modelVersion(body) };
+    },
+    async quickRead(image, options) {
+      const body = await backend.post({ task: 'quick_read', image: await imagePayload(image) }, options?.signal);
+      const q = body.quickRead as Record<string, unknown> | undefined;
+      if (!q || typeof q.readable !== 'boolean') badResponse();
+      const keyText = stringField(q.keyText);
+      const readable = q.readable && Boolean(keyText);
+      return {
+        readable,
+        documentType: stringField(q.documentType) || 'unknown',
+        keyText: readable ? keyText : '',
+        summary: readable ? stringField(q.summary) : '',
+        reason: readable ? '' : stringField(q.reason),
+        modelId: 'muse-spark',
+        modelVersion: modelVersion(body),
+      };
+    },
+    async askAboutText(image, question, options) {
+      const body = await backend.post(
+        { task: 'ask_text', question, image: await imagePayload(image) },
+        options?.signal,
+      );
+      const a = body.answer as Record<string, unknown> | undefined;
+      const basis = typeof a?.basis === 'string' ? BASIS[a.basis] : undefined;
+      const answer = stringField(a?.answer);
+      if (!a || !basis || !answer) badResponse();
+      return {
+        answer,
+        basis,
+        quote: basis === 'not-found' ? '' : stringField(a.quote),
+        modelId: 'muse-spark',
+        modelVersion: modelVersion(body),
+      };
+    },
+    async checkScene(image, { previousSummary, signal }) {
+      const body = await backend.post(
+        { task: 'scene_check', previousSummary, image: await imagePayload(image) },
+        signal,
+      );
+      const s = body.scene as Record<string, unknown> | undefined;
+      const summary = stringField(s?.summary);
+      if (!s || !summary) badResponse();
+      const objects = Array.isArray(s.objects) ? s.objects.map(stringField).filter(Boolean) : [];
+      const changes = Array.isArray(s.changes)
+        ? s.changes
+            .map((c) => {
+              const item = (c ?? {}) as Record<string, unknown>;
+              const category = typeof item.category === 'string' ? SCENE_CATEGORY[item.category] : undefined;
+              return { category: category ?? ('other' as const), text: stringField(item.text) };
+            })
+            .filter((c) => c.text)
+        : [];
+      return {
+        summary,
+        objects,
+        changes,
+        confidence: CONFIDENCE.find((c) => c === s.confidence) ?? 'low',
+        modelId: 'muse-spark',
+        modelVersion: modelVersion(body),
+      };
     },
   };
 

@@ -573,6 +573,70 @@ Never put the Meta key in a `VITE_*` variable: those are bundled into the browse
 - Long answers are never spoken automatically (only replies of 300 characters or fewer, when spoken replies are on).
   Read aloud, Pause, Resume and Stop are always available.
 
+## Phases 5-7: Find, Read, Memory, Daily Assistance, Environmental Awareness (v0.5.0)
+
+Everything below uses the existing Meta Muse Spark connection through the `openeyes-ai` server function. No new AI
+model was added. SAM 3.1 or other Meta detection or segmentation models were not used, because official API access
+was not confirmed. Positions are described in words only.
+
+### Advanced Find
+
+- A live search session ("Start live search for keys") checks one camera frame at a time at a controlled rate, never
+  sends overlapping requests, and pauses after a round of frames to limit usage. "Keep looking" continues; "Stop
+  search" ends the session and turns the camera off.
+- Answers use camera-relative wording ("on the table, near the laptop"). Uncertain answers say "I may see your keys,
+  but I can't confirm from this angle." It never says an item is reachable or safe to approach.
+- "Remember this location" saves only after confirmation. Remembered locations are always labelled as something the
+  user said earlier, not something the camera sees now.
+
+### Advanced Read
+
+- Quick Read, Full Read, Ask About Text (answers labelled as exact text, summary, inference or not found) and Read
+  Again. Follow-up questions use the same captured document until a new scan or Clear reading session.
+- Extracted text is kept separate from summaries; blurry photos are reported as unreadable. Document images are not
+  stored and document contents are not logged.
+
+### Personal memory
+
+- Categories: notes, object locations, preferences, accessibility preferences, routines, reminders, frequently used
+  information. Nothing is saved without confirmation.
+- "Remember that I prefer short descriptions" switches to brief answers only after confirmation. "Remember that my
+  glasses are in the bedroom drawer" asks "Would you like me to remember that location?" and replies "Saved."
+- "Where are my glasses?" answers from saved locations and suggests checking with the camera. Only relevant memories
+  are sent to Meta AI.
+- Memory screen: category filter, labels, mark reminders done, Export memories (JSON), Clear all memories with
+  confirmation. Older memories without a category show as notes; nothing is rewritten.
+- Memories stay in this browser's local storage, not encrypted beyond what the browser provides.
+
+### Daily assistance
+
+- "Help me make coffee" offers a guided task; after "yes", Meta AI writes up to 12 short steps. "Next", "Repeat",
+  "Go back", "Pause", "Resume" and "Stop" work by voice, typing or buttons. Steps never advance by themselves, and
+  OpenEyes says it cannot see the user doing them. A paused task survives a reload.
+- "Remind me to call John tomorrow" saves a reminder record after confirmation. **Reminders do not alert you**; there
+  is no notification or background scheduling, and the app says so.
+
+### Environmental awareness (experimental, not a mobility aid)
+
+- Off by default. Settings > Environmental awareness: enable, pause, frequency (rarely by default), detail (brief by
+  default), categories (people, doors, stairs by default).
+- When on, Live Explore compares automatic frames and may announce one descriptive change ("The door appears open.").
+  Low-confidence changes, repeats, unchosen categories and announcements too close together are skipped. User
+  questions come first.
+- A safety filter removes wording such as "the path is clear", "safe to cross", "no obstacles", "walk forward", turn
+  directions, and speed or approach claims; Meta AI is also told never to produce them.
+- Recent observations are kept in memory for 3 minutes per camera session, then forgotten, and never become saved
+  memories. It does not replace a white cane, guide dog or orientation and mobility training.
+
+### Working together
+
+- The Assistant routes clear requests by rule: "Find my keys" opens Find with "keys" filled in, "Read this" opens
+  Read, "What's around me?" opens Live Explore, "Remember..." asks to save, "Help me..." offers a guided task.
+  Everything else goes to Meta AI as before.
+- In Live Explore, "Remember that my keys are on this table" asks for consent and accepts a spoken "yes" or "no".
+- The existing microphone, Meta Voice relay, browser fallback and speech output are reused. User answers interrupt;
+  errors are spoken; automatic descriptions and scene announcements never interrupt speech or a voice conversation.
+
 ## Placeholders (not functional yet)
 
 - **SAM 3.1 segmentation** (exact object outlines). Find uses Muse Spark's description of position instead.
@@ -581,7 +645,7 @@ Never put the Meta key in a `VITE_*` variable: those are bundled into the browse
 - **Meta glasses connection.** The Connect button never shows a fake success.
 - **Proactive assistance** beyond Live Explore. Smart Explore only speaks during a session you start; there is no background monitoring.
 
-## Planned features (Phase 5+, not started)
+## Planned features (not started)
 
 - SAM 3.1 integration for Find
 - Muse Voice Transcribe for voice input through a secure server relay (see the evaluation above)
@@ -643,6 +707,15 @@ Manual testing with TalkBack and VoiceOver on physical devices is still required
 
 ## Test results
 
+v0.5.0 (Phases 5-7): `npm run typecheck` passes, `npm test` **360 tests passing in 25 files**, `npm run build`
+succeeds. New test files: `advancedFind`, `advancedRead`, `advancedMemory`, `taskSessions`, `environmentalAwareness`,
+`unifiedExperience`, plus new server cases in `edgeFunction`. One older test was changed on purpose: "Where are my
+keys" is now answered from saved memories, so the "could not answer" check uses a general question. They cover object
+search, uncertainty, reading accuracy handling, document follow-ups, memory consent, retrieval and deletion, task
+sessions, reminder limitations, scene context expiry, environmental announcements and the safety filter, intent
+routing, cross-feature conversations, camera and microphone cleanup, and API failure recovery. These are **mocked
+tests**; they do not prove real-world recognition or reading accuracy, and nothing was tested on a real Android phone.
+
 v0.4.2: `npm run typecheck` passes, `npm test` **271 tests passing in 19 files** (238 from Phase 4.1, unchanged, plus
 33 new in `appUpdates.test.tsx`), `npm run build` succeeds and emits `dist/version.json` and `dist/_headers`. New
 tests cover version display, manifest request without HTTP cache, build id comparison, update detection, every check
@@ -700,7 +773,10 @@ and UI flows on Explore, Find, Read and Assistant.
   (audio said during setup is buffered, not lost).
 - Smart Explore change detection uses word overlap between descriptions, so it can miss small changes or repeat a
   scene described in different words.
-- Find reports approximate positions in words only; it cannot measure distance and does not use SAM 3.1 yet.
+- Find reports approximate positions in words only; it cannot measure distance and does not use SAM 3.1.
+- Reminders are records only; they never alert you.
+- Environmental awareness is experimental, works only during a Live Explore session you start, and is not a mobility aid.
+- Guided task steps are written by Meta AI and can be wrong or incomplete.
 - Memory relevance uses simple keyword matching.
 - Speech recognition depends on browser support (Chrome/Edge yes, Firefox no) and follows the browser language.
 - Data is per-browser and per-device; private browsing may discard it.

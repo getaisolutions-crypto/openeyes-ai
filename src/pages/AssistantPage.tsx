@@ -11,7 +11,12 @@ import { useSettings } from '../hooks/useSettings';
 import { useAnnouncer } from '../hooks/useAnnouncer';
 import { aiErrorMessage } from '../hooks/useAIRequest';
 import { SPEECH_ERROR_MESSAGES, useSpeechRecognition } from '../hooks/useSpeechRecognition';
-import { parseRememberRequest, selectRelevantMemories } from '../services/ai/conversationContext';
+import { TaskPanel } from '../components/assistant/TaskPanel';
+import { useTaskSession } from '../hooks/useTaskSession';
+import { selectRelevantMemories } from '../services/ai/conversationContext';
+import { routeIntent, type Intent } from '../services/assistant/intentRouter';
+import { findRememberedLocation, phraseRememberedLocation, yourItem } from '../services/find/objectSearch';
+import { REMINDER_LIMITATION, proposeMemory, type MemoryProposal } from '../services/memory/memoryIntent';
 import type { ChatMessage } from '../types/ai';
 import type { CapturedImage } from '../types/camera';
 import { createId } from '../utils/id';
@@ -39,7 +44,7 @@ function loadConversation(enabled: boolean): ChatMessage[] {
 export default function AssistantPage() {
   const { ai, voice, memory } = useServices();
   const aiStatus = ai.getStatus();
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const { announce } = useAnnouncer();
   const location = useLocation();
   const navigate = useNavigate();
@@ -51,7 +56,8 @@ export default function AssistantPage() {
   const [inputError, setInputError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [photo, setPhoto] = useState<CapturedImage | null>(null);
-  const [pendingMemory, setPendingMemory] = useState<string | null>(null);
+  const [pendingMemory, setPendingMemory] = useState<MemoryProposal | null>(null);
+  const task = useTaskSession();
   const [memoryNotice, setMemoryNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const listEndRef = useRef<HTMLLIElement>(null);
@@ -67,6 +73,63 @@ export default function AssistantPage() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  const speakReply = useCallback(
+    (text: string) => {
+      if (settings.voiceOutput && !settings.quietMode && text.length <= AUTO_SPEAK_MAX_CHARS) {
+        voice.speak(text, { rate: settings.speechRate });
+      }
+    },
+    [settings.voiceOutput, settings.quietMode, settings.speechRate, voice],
+  );
+
+  const addLocalReply = useCallback(
+    (text: string, source: ChatMessage['source']) => {
+      const reply: ChatMessage = { id: createId(), role: 'assistant', content: text, createdAt: new Date().toISOString(), source };
+      setMessages((prev) => [...prev, reply]);
+      announce(`OpenEyes said: ${text}`);
+      speakReply(text);
+    },
+    [announce, speakReply],
+  );
+
+  /** Requests handled on the device or by another screen. Returns null when Meta AI should answer instead. */
+  const localReply = useCallback(
+    async (intent: Intent): Promise<{ text: string; source: ChatMessage['source']; after?: () => void } | null> => {
+      switch (intent.kind) {
+        case 'task-command':
+          return { text: (await task.command(intent.command)) || 'Task stopped.', source: 'task' };
+        case 'task':
+          return { text: task.offer(intent.task), source: 'task' };
+        case 'where-is': {
+          const saved = await memory.list().catch(() => []);
+          const found = findRememberedLocation(saved, intent.item);
+          // Other notes may mention the item; let Meta AI answer with those as background.
+          if (!found && selectRelevantMemories(saved, intent.item).length > 0) return null;
+          const check = `To check with the camera, say "find my ${intent.item}".`;
+          return {
+            text: found
+              ? `${phraseRememberedLocation(found, intent.item)} ${check}`
+              : `I don't have a saved location for ${yourItem(intent.item)}. ${check}`,
+            source: 'memory',
+          };
+        }
+        case 'find':
+          return {
+            text: `Opening Find to look for ${yourItem(intent.item)}.`,
+            source: 'app',
+            after: () => navigate('/find', { state: { object: intent.item } }),
+          };
+        case 'read':
+          return { text: 'Opening Read. Take a photo of the text.', source: 'app', after: () => navigate('/read') };
+        case 'explore':
+          return { text: 'Opening Live Explore.', source: 'app', after: () => navigate('/explore') };
+        default:
+          return null;
+      }
+    },
+    [memory, navigate, task],
+  );
+
   const send = useCallback(
     async (raw: string, inputMode: 'voice' | 'text') => {
       const result = validateRequiredText(raw, 'Message', LIMITS.chatMessage);
@@ -78,11 +141,21 @@ export default function AssistantPage() {
       setError(null);
       setMemoryNotice(null);
 
-      const note = parseRememberRequest(result.value);
-      if (note) {
+      const intent = routeIntent(result.value, { taskActive: task.open, hasPhoto: Boolean(photo) });
+
+      if (intent.kind === 'remember' || intent.kind === 'reminder') {
         setDraft('');
-        setPendingMemory(note);
-        announce('OpenEyes needs your confirmation before saving this memory.');
+        const proposal =
+          intent.kind === 'remember'
+            ? proposeMemory(intent.note)
+            : {
+                input: intent.input,
+                confirmPrompt: 'Would you like me to save this reminder?',
+                savedReply: `Reminder saved. ${REMINDER_LIMITATION}`,
+              };
+        setPendingMemory(proposal);
+        announce(`${proposal.confirmPrompt} OpenEyes needs your confirmation before saving this memory.`);
+        speakReply(proposal.confirmPrompt);
         return;
       }
 
@@ -97,6 +170,16 @@ export default function AssistantPage() {
       const history = [...messages, userMessage];
       setMessages(history);
       setDraft('');
+
+      if (intent.kind !== 'chat') {
+        const local = await localReply(intent);
+        if (local) {
+          addLocalReply(local.text, local.source);
+          local.after?.();
+          return;
+        }
+      }
+
       setPending(true);
       announce(photo ? 'Message and photo sent. Waiting for OpenEyes.' : 'Message sent. Waiting for OpenEyes.');
 
@@ -116,9 +199,7 @@ export default function AssistantPage() {
         const reply: ChatMessage = { ...response.message, memoriesShared: memories.length || undefined };
         setMessages((prev) => [...prev, reply]);
         announce(`OpenEyes said: ${reply.content}`);
-        if (settings.voiceOutput && !settings.quietMode && reply.content.length <= AUTO_SPEAK_MAX_CHARS) {
-          voice.speak(reply.content, { rate: settings.speechRate });
-        }
+        speakReply(reply.content);
       } catch (err) {
         if (controller.signal.aborted) return;
         const message = aiErrorMessage(err);
@@ -129,7 +210,7 @@ export default function AssistantPage() {
         setPending(false);
       }
     },
-    [ai, announce, memory, messages, photo, settings, voice],
+    [ai, announce, memory, messages, photo, settings, voice, task, localReply, addLocalReply, speakReply],
   );
 
   const cancelRequest = () => {
@@ -140,17 +221,24 @@ export default function AssistantPage() {
   };
 
   const saveMemory = async () => {
-    const text = pendingMemory;
+    const proposal = pendingMemory;
     setPendingMemory(null);
-    if (!text) return;
+    if (!proposal) return;
     try {
-      await memory.create({ text });
-      setMemoryNotice({ ok: true, text: `Saved to My Memories: "${text}"` });
-      announce('Memory saved.');
+      await memory.create(proposal.input);
+      if (proposal.responseLength) updateSettings({ responseLength: proposal.responseLength });
+      setMemoryNotice({ ok: true, text: `${proposal.savedReply} "${proposal.input.text}"` });
+      announce(`Memory saved. ${proposal.savedReply}`);
+      speakReply(proposal.savedReply);
     } catch {
       setMemoryNotice({ ok: false, text: 'The memory could not be saved. Please try again.' });
       announce('The memory could not be saved.', 'assertive');
     }
+  };
+
+  const runTaskCommand = async (command: Parameters<typeof task.command>[0]) => {
+    const text = await task.command(command);
+    if (text) addLocalReply(text, 'task');
   };
 
   const speech = useSpeechRecognition({ onFinal: (text) => void send(text, 'voice') });
@@ -209,6 +297,10 @@ export default function AssistantPage() {
       )}
 
       {aiStatus.available && <PhotoAttachment photo={photo} onPhotoChange={setPhoto} />}
+
+      {task.session && (
+        <TaskPanel session={task.session} onCommand={(c) => void runTaskCommand(c)} onClose={task.clear} />
+      )}
 
       <section aria-label="Voice input" className="card mt-4 flex flex-col items-center gap-4 p-6 text-center">
         {speech.supported ? (
@@ -283,6 +375,8 @@ export default function AssistantPage() {
                   <p className="mt-1 text-xs opacity-70">
                     {formatDateTime(m.createdAt)}
                     {m.photoAttached ? ' · with photo' : ''}
+                    {m.source === 'memory' ? ' · from your saved memories, not the camera' : ''}
+                    {m.source === 'task' ? ' · guided task' : ''}
                     {m.memoriesShared
                       ? ` · ${m.memoriesShared} saved ${m.memoriesShared === 1 ? 'memory' : 'memories'} shared as background`
                       : ''}
@@ -366,7 +460,7 @@ export default function AssistantPage() {
       <ConfirmDialog
         open={pendingMemory !== null}
         title="Save this memory?"
-        message={`"${pendingMemory ?? ''}" will be saved in My Memories on this device. You can edit or delete it later.`}
+        message={`${pendingMemory?.confirmPrompt ?? ''} "${pendingMemory?.input.text ?? ''}" will be saved in My Memories on this device. You can edit or delete it later.`}
         confirmLabel="Save memory"
         onConfirm={() => void saveMemory()}
         onCancel={() => {

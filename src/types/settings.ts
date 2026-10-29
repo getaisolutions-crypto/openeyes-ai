@@ -1,4 +1,4 @@
-import type { ResponseLength } from './ai';
+import type { ResponseLength, SceneChangeCategory } from './ai';
 import type { CameraSourceId } from './camera';
 
 export type Theme = 'dark' | 'light';
@@ -11,6 +11,10 @@ export type ExploreInterval = 8 | 12 | 20 | 30;
 export type ExploreSessionMinutes = 5 | 10 | 15;
 /** meta: Meta Muse Voice Transcribe with automatic fallback to the browser. browser: the browser's own recognition. */
 export type SpeechRecognitionChoice = 'meta' | 'browser';
+/** Minimum gap between environmental announcements. */
+export type SceneAlertFrequency = 'low' | 'medium' | 'high';
+export type SceneAlertDetail = 'brief' | 'detailed';
+export type SceneAlertCategory = Extract<SceneChangeCategory, 'person' | 'door' | 'stairs' | 'new-area' | 'object'>;
 
 export interface Settings {
   theme: Theme;
@@ -39,4 +43,10 @@ export interface Settings {
   conversationBargeIn: boolean;
   /** Shows timing figures for each voice turn. No words or audio are shown or stored. */
   voiceDiagnostics: boolean;
+  /** Experimental, descriptive only: speak visible scene changes during Live Explore. Off by default. */
+  sceneAlerts: boolean;
+  sceneAlertFrequency: SceneAlertFrequency;
+  sceneAlertDetail: SceneAlertDetail;
+  sceneAlertCategories: SceneAlertCategory[];
+  sceneAlertsPaused: boolean;
 }

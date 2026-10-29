@@ -1,11 +1,15 @@
-import { useCallback, useId, useState } from 'react';
-import { BookOpenText, Pause, Play, ScanText, Square } from 'lucide-react';
+import { useCallback, useId, useRef, useState } from 'react';
+import { BookOpenText, Eraser, Pause, Play, RotateCcw, ScanText, Square, Zap } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { CameraCapture } from '../components/CameraCapture';
 import { Notice } from '../components/Notice';
 import { AIPending } from '../components/AIResult';
+import { QuickReadCard } from '../components/read/QuickReadCard';
+import { DocumentQuestions } from '../components/read/DocumentQuestions';
 import { useAIRequest } from '../hooks/useAIRequest';
-import type { TextReadingResult } from '../types/ai';
+import { useReadingSession } from '../hooks/useReadingSession';
+import type { QuickReadResult, TextReadingResult } from '../types/ai';
+import { phraseQuickRead } from '../services/read/readingSession';
 import { useServices } from '../services/ServicesContext';
 import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
 import { useSettings } from '../hooks/useSettings';
@@ -21,23 +25,78 @@ export default function ReadPage() {
   const textId = useId();
   const [image, setImage] = useState<CapturedImage | null>(null);
   const [text, setText] = useState('');
+  const [cameraKey, setCameraKey] = useState(0);
+  const lastExtracted = useRef('');
   const request = useAIRequest<TextReadingResult>();
+  const quickRequest = useAIRequest<QuickReadResult>();
   const { reset } = request;
+  const resetQuick = quickRequest.reset;
+  const session = useReadingSession(image, text);
   const visionStatus = vision.getStatus();
   const hasText = text.trim().length > 0;
-  const pending = request.state.status === 'pending';
+  const pending = request.state.status === 'pending' || quickRequest.state.status === 'pending';
+
+  const speakIfEnabled = (spoken: string) => {
+    if (settings.voiceOutput) tts.speak(spoken);
+  };
 
   const onImageChange = useCallback(
     (next: CapturedImage | null) => {
       setImage(next);
       reset();
+      resetQuick();
     },
-    [reset],
+    [reset, resetQuick],
   );
+
+  const quickRead = async () => {
+    if (!image) return;
+    tts.stop();
+    request.reset();
+    const result = await quickRequest.run(
+      (signal) => vision.quickRead(image, { signal }),
+      'Quick reading your photo. This can take a few seconds.',
+    );
+    if (!result) return;
+    session.setQuick(result);
+    const spoken = phraseQuickRead(result);
+    if (result.readable) lastExtracted.current = result.keyText;
+    announce(spoken);
+    speakIfEnabled(spoken);
+  };
+
+  const readAgain = () => {
+    const again = text.trim() || lastExtracted.current;
+    if (!again) return;
+    tts.speak(again);
+    announce('Reading again.');
+  };
+
+  const ask = async (question: string) => {
+    tts.stop();
+    const reply = await session.ask(question);
+    if (reply) {
+      announce(reply);
+      speakIfEnabled(reply);
+    }
+  };
+
+  const clearSession = () => {
+    tts.stop();
+    session.reset();
+    request.reset();
+    quickRequest.reset();
+    setText('');
+    lastExtracted.current = '';
+    setImage(null);
+    setCameraKey((k) => k + 1);
+    announce('Reading session cleared. The photo and text were removed from this screen.');
+  };
 
   const readFromPhoto = async () => {
     if (!image) return;
     tts.stop();
+    quickRequest.reset();
     const result = await request.run(
       (signal) => vision.readText(image, { signal }),
       'Reading text from your photo. This can take a few seconds.',
@@ -45,6 +104,7 @@ export default function ReadPage() {
     if (!result) return;
     if (result.readable) {
       setText(result.text.slice(0, LIMITS.readText));
+      lastExtracted.current = result.text;
       const lines = result.text.split('\n').filter((l) => l.trim()).length;
       announce(`Text found, ${lines} ${lines === 1 ? 'line' : 'lines'}. It is in the text box below. Press Read aloud to hear it.`);
     } else {
@@ -60,16 +120,29 @@ export default function ReadPage() {
         description="Capture or choose a photo of text, or paste text to have it read aloud."
       />
 
-      <CameraCapture subject="text to read" allowUpload onImageChange={onImageChange} />
+      <CameraCapture key={cameraKey} subject="text to read" allowUpload onImageChange={onImageChange} />
 
-      <button
-        type="button"
-        className="btn-primary mt-4 w-full text-lg"
-        disabled={!image || !visionStatus.available || pending}
-        onClick={() => void readFromPhoto()}
-      >
-        <ScanText aria-hidden="true" className="h-6 w-6" /> Read text from photo
-      </button>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          className="btn-secondary text-lg"
+          disabled={!image || !visionStatus.available || pending}
+          onClick={() => void quickRead()}
+        >
+          <Zap aria-hidden="true" className="h-6 w-6" /> Quick read
+        </button>
+        <button
+          type="button"
+          className="btn-primary text-lg"
+          disabled={!image || !visionStatus.available || pending}
+          onClick={() => void readFromPhoto()}
+        >
+          <ScanText aria-hidden="true" className="h-6 w-6" /> Read text from photo
+        </button>
+      </div>
+      <p className="mt-2 text-sm text-muted">
+        Quick read gives the most important text. Read text from photo is the full read, in order.
+      </p>
       {!visionStatus.available && (
         <div className="mt-3">
           <Notice variant="warning" title="Reading text from photos not available yet">
@@ -79,7 +152,16 @@ export default function ReadPage() {
         </div>
       )}
 
-      {pending && <AIPending label="Reading text from your photo" onCancel={request.cancel} />}
+      {quickRequest.state.status === 'pending' && <AIPending label="Quick reading your photo" onCancel={quickRequest.cancel} />}
+      {quickRequest.state.status === 'error' && (
+        <div className="mt-4">
+          <Notice variant="error" title="Could not read the photo">
+            {quickRequest.state.message}
+          </Notice>
+        </div>
+      )}
+      {quickRequest.state.status === 'success' && <QuickReadCard result={quickRequest.state.result} />}
+      {request.state.status === 'pending' && <AIPending label="Reading text from your photo" onCancel={request.cancel} />}
       {request.state.status === 'error' && (
         <div className="mt-4">
           <Notice variant="error" title="Could not read the photo">
@@ -102,6 +184,17 @@ export default function ReadPage() {
             contain mistakes, so check important details such as medicine doses with a trusted person.
           </Notice>
         </div>
+      )}
+
+      {visionStatus.available && (
+        <DocumentQuestions
+          turns={session.turns}
+          asking={session.asking}
+          error={session.error}
+          disabled={!image}
+          onAsk={(q) => void ask(q)}
+          onCancel={session.cancel}
+        />
       )}
 
       <section aria-labelledby="read-aloud-heading" className="card mt-6 p-5">
@@ -147,6 +240,14 @@ export default function ReadPage() {
               <button type="button" className="btn-secondary" disabled={tts.state === 'idle'} onClick={tts.stop}>
                 <Square aria-hidden="true" className="h-5 w-5" /> Stop
               </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={!hasText && !lastExtracted.current}
+                onClick={readAgain}
+              >
+                <RotateCcw aria-hidden="true" className="h-5 w-5" /> Read again
+              </button>
             </div>
             <p className="mt-3 text-sm text-muted">
               Speech rate {settings.speechRate.toFixed(1)}x. Change it in Settings. Reading uses your device&apos;s built-in voice.
@@ -159,6 +260,19 @@ export default function ReadPage() {
             </Notice>
           </div>
         )}
+      </section>
+
+      <section aria-labelledby="reading-privacy-heading" className="card mt-4 p-5">
+        <h2 id="reading-privacy-heading" className="text-xl font-bold">
+          Reading privacy
+        </h2>
+        <p className="mt-1 text-muted">
+          Document photos, text and answers stay on this screen only. They are not saved, and they are removed when you
+          leave Read or clear the session. A photo is only sent to Meta AI when you press a read or ask button.
+        </p>
+        <button type="button" className="btn-secondary mt-3 w-full" onClick={clearSession}>
+          <Eraser aria-hidden="true" className="h-5 w-5" /> Clear reading session
+        </button>
       </section>
     </>
   );

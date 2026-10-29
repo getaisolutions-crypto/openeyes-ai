@@ -1,4 +1,4 @@
-import type { ExploreInterval, ExploreSessionMinutes, Settings } from '../../types/settings';
+import type { ExploreInterval, ExploreSessionMinutes, SceneAlertCategory, Settings } from '../../types/settings';
 import { STORAGE_KEYS, readJSON, writeJSON } from '../../utils/storage';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -23,7 +23,14 @@ export const DEFAULT_SETTINGS: Settings = {
   conversationBargeIn: false,
   speechRecognition: 'meta',
   voiceDiagnostics: false,
+  sceneAlerts: false,
+  sceneAlertFrequency: 'low',
+  sceneAlertDetail: 'brief',
+  sceneAlertCategories: ['person', 'door', 'stairs'],
+  sceneAlertsPaused: false,
 };
+
+export const SCENE_ALERT_CATEGORIES: readonly SceneAlertCategory[] = ['person', 'door', 'stairs', 'new-area', 'object'];
 
 export const EXPLORE_INTERVALS: readonly ExploreInterval[] = [8, 12, 20, 30];
 export const EXPLORE_SESSION_MINUTES: readonly ExploreSessionMinutes[] = [5, 10, 15];
@@ -66,6 +73,13 @@ export function sanitizeSettings(raw: unknown): Settings {
     conversationBargeIn: bool(s.conversationBargeIn, d.conversationBargeIn),
     speechRecognition: oneOf(s.speechRecognition, ['meta', 'browser'] as const, d.speechRecognition),
     voiceDiagnostics: bool(s.voiceDiagnostics, d.voiceDiagnostics),
+    sceneAlerts: bool(s.sceneAlerts, d.sceneAlerts),
+    sceneAlertFrequency: oneOf(s.sceneAlertFrequency, ['low', 'medium', 'high'] as const, d.sceneAlertFrequency),
+    sceneAlertDetail: oneOf(s.sceneAlertDetail, ['brief', 'detailed'] as const, d.sceneAlertDetail),
+    sceneAlertCategories: Array.isArray(s.sceneAlertCategories)
+      ? SCENE_ALERT_CATEGORIES.filter((c) => (s.sceneAlertCategories as unknown[]).includes(c))
+      : [...d.sceneAlertCategories],
+    sceneAlertsPaused: bool(s.sceneAlertsPaused, d.sceneAlertsPaused),
   };
 }
 

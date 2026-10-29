@@ -108,7 +108,7 @@ describe('AI screens with a mocked OpenEyes server', () => {
     await takePhoto(user);
     await user.click(screen.getByRole('button', { name: 'Read text from photo' }));
     expect(await screen.findByText('Text found')).toBeInTheDocument();
-    expect(screen.getByRole('textbox')).toHaveValue('Aspirin\nTake 2 tablets');
+    expect(screen.getByRole('textbox', { name: 'Text' })).toHaveValue('Aspirin\nTake 2 tablets');
   });
 });
 

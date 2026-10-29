@@ -27,6 +27,9 @@ export function createUnavailableAIProvider(): AIProvider {
     async sendMessage() {
       throw new ProviderUnavailableError('conversation', AI_NOT_CONNECTED);
     },
+    async planTask() {
+      throw new ProviderUnavailableError('conversation', AI_NOT_CONNECTED);
+    },
     async checkConnection() {
       return { configured: false, message: AI_NOT_CONNECTED };
     },
@@ -42,6 +45,15 @@ export function createUnavailableVisionProvider(): VisionProvider {
     },
     async readText() {
       throw new ProviderUnavailableError('text-reading', VISION_NOT_CONNECTED);
+    },
+    async quickRead() {
+      throw new ProviderUnavailableError('text-reading', VISION_NOT_CONNECTED);
+    },
+    async askAboutText() {
+      throw new ProviderUnavailableError('text-reading', VISION_NOT_CONNECTED);
+    },
+    async checkScene() {
+      throw new ProviderUnavailableError('scene-description', VISION_NOT_CONNECTED);
     },
   };
 }

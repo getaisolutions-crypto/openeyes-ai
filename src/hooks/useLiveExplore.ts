@@ -14,8 +14,17 @@ import {
   type Observation,
 } from '../services/explore/liveExploreController';
 import { parseExploreCommand } from '../services/explore/exploreCommands';
-import { selectRelevantMemories } from '../services/ai/conversationContext';
-import { AIRequestError, type ChatMessage } from '../types/ai';
+import {
+  alertSettingsFrom,
+  createSceneMemory,
+  isFresh,
+  selectAnnouncement,
+  stripUnsafeSentences,
+  type AlertState,
+} from '../services/explore/sceneAwareness';
+import { parseRememberRequest, selectRelevantMemories } from '../services/ai/conversationContext';
+import { proposeMemory, type MemoryProposal } from '../services/memory/memoryIntent';
+import { AIRequestError, type ChatMessage, type SceneCheckResult } from '../types/ai';
 import { CameraError, type CameraErrorKind, type CapturedImage } from '../types/camera';
 import type { ExploreMode } from '../types/settings';
 import { describeFindResult } from '../components/FindResultCard';
@@ -85,7 +94,7 @@ export function buildContextualQuestion(question: string, earlier: readonly Obse
 
 export function useLiveExplore() {
   const { camera, vision, ai, objectDetection, memory } = useServices();
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const { announce } = useAnnouncer();
   const speech = useSpeechSynthesis();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -97,13 +106,17 @@ export function useLiveExplore() {
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
-  const [pendingMemory, setPendingMemory] = useState<string | null>(null);
+  const [pendingMemory, setPendingMemory] = useState<MemoryProposal | null>(null);
   const lastReplyRef = useRef<string | null>(null);
   const conversationRef = useRef(false);
   const speakingRef = useRef(false);
   const routerRef = useRef<SpeechRouter | null>(null);
   const historyRef = useRef<ChatMessage[]>([]);
   const chatAbortRef = useRef<AbortController | null>(null);
+  const sceneMemoryRef = useRef(createSceneMemory());
+  const sessionIdRef = useRef('');
+  const pendingSceneRef = useRef<{ capturedAt: string; result: SceneCheckResult } | null>(null);
+  const alertStateRef = useRef<AlertState>({ lastAlertAt: null, recentAlerts: [] });
 
   const canSpeak = speech.supported && settings.voiceOutput && !settings.quietMode;
   const settingsRef = useRef(settings);
@@ -185,16 +198,44 @@ export function useLiveExplore() {
     }
 
     const s = settingsRef.current;
+    sessionIdRef.current = createId();
+    sceneMemoryRef.current.clear();
+    alertStateRef.current = { lastAlertAt: null, recentAlerts: [] };
     const controller = createLiveExploreController(
       {
         captureFrame,
-        describe: async (image, signal) =>
-          (await vision.describeScene(image, { responseLength: 'brief', signal })).summary,
+        describe: async (image, signal) => {
+          if (!settingsRef.current.sceneAlerts) {
+            return (await vision.describeScene(image, { responseLength: 'brief', signal })).summary;
+          }
+          const sessionId = sessionIdRef.current;
+          const previousSummary = sceneMemoryRef.current.latest(sessionId)?.summary;
+          const result = await vision.checkScene(image, { previousSummary, signal });
+          sceneMemoryRef.current.add({ summary: result.summary, sessionId, confidence: result.confidence, objects: result.objects });
+          pendingSceneRef.current = { capturedAt: image.capturedAt, result };
+          return stripUnsafeSentences(result.summary) || 'I could not describe this view clearly.';
+        },
         releaseImage,
         onStatus: (next) => setStatus(next === 'ended' ? 'idle' : next),
         onObservation: (observation, decision) => {
           setLastCheckedAt(observation.capturedAt);
           setProblem(null);
+          const scene = pendingSceneRef.current;
+          pendingSceneRef.current = null;
+          if (observation.source === 'auto' && scene && scene.capturedAt === observation.capturedAt) {
+            const now = Date.now();
+            const alert = selectAnnouncement(scene.result, alertSettingsFrom(settingsRef.current), alertStateRef.current, now);
+            if (alert) {
+              alertStateRef.current = {
+                lastAlertAt: now,
+                recentAlerts: [{ text: alert, at: now }, ...alertStateRef.current.recentAlerts].slice(0, 5),
+              };
+              lastReplyRef.current = alert;
+              addEntry({ speaker: 'openeyes', text: alert, basis: 'Scene change in the current camera view. Informational only' });
+              sayRef.current(alert, 'auto');
+              return;
+            }
+          }
           if (!decision.speak) return;
           lastReplyRef.current = observation.text;
           addEntry({ speaker: 'openeyes', text: observation.text, basis: 'Current camera view' });
@@ -212,6 +253,8 @@ export function useLiveExplore() {
         onEnd: (reason) => {
           stopStream();
           controllerRef.current = null;
+          sceneMemoryRef.current.clear();
+          pendingSceneRef.current = null;
           setBusyLabel(null);
           setStatus('idle');
           if (reason === 'unmount') return;
@@ -416,7 +459,7 @@ export function useLiveExplore() {
     (question: string, about: 'current' | 'previous', turnSignal?: AbortSignal) => {
       if (!controllerRef.current && routerRef.current) return chatWithoutCamera(question, turnSignal);
       return runUserTask('Looking and answering', async (c, signal) => {
-        const earlier = [...c.history];
+        const earlier = c.history.filter((o) => isFresh(o.capturedAt));
         const previous = about === 'previous' ? earlier[0] : undefined;
         const image = previous ? previous.image : await captureFrame();
         const saved = await memory.list().catch(() => []);
@@ -482,21 +525,37 @@ export function useLiveExplore() {
       say(message, 'reply');
       return;
     }
-    setPendingMemory(`Observed ${formatDateTime(last.capturedAt)}: ${last.text}`.slice(0, 1000));
+    setPendingMemory({
+      input: { text: `Observed ${formatDateTime(last.capturedAt)}: ${last.text}`.slice(0, 1000), category: 'note' },
+      confirmPrompt: 'Would you like me to save this to My Memories?',
+      savedReply: 'Saved to My Memories.',
+    });
     announce('OpenEyes needs your confirmation before saving this memory.');
   }, [addEntry, announce, say]);
 
+  /** "Remember that my keys are on this table": asks for consent, never saves on its own. */
+  const proposeNote = useCallback(
+    (note: string) => {
+      const proposal = proposeMemory(note);
+      setPendingMemory(proposal);
+      addEntry({ speaker: 'openeyes', text: proposal.confirmPrompt });
+      say(proposal.confirmPrompt, 'reply');
+    },
+    [addEntry, say],
+  );
+
   const confirmMemory = useCallback(async () => {
-    const text = pendingMemory;
+    const proposal = pendingMemory;
     setPendingMemory(null);
-    if (!text) return;
+    if (!proposal) return;
     try {
-      await memory.create({ text });
-      say('Saved to My Memories.', 'status');
+      await memory.create(proposal.input);
+      if (proposal.responseLength) updateSettings({ responseLength: proposal.responseLength });
+      say(proposal.savedReply, 'status');
     } catch {
       say('The memory could not be saved.', 'status');
     }
-  }, [memory, pendingMemory, say]);
+  }, [memory, pendingMemory, say, updateSettings]);
 
   const cancelMemory = useCallback(() => {
     setPendingMemory(null);
@@ -517,9 +576,27 @@ export function useLiveExplore() {
    */
   const handleInput = useCallback(
     async (input: string, onNeedsStart: () => void, turnSignal?: AbortSignal): Promise<void> => {
+      if (pendingMemory) {
+        const answer = input.trim().toLowerCase().replace(/[.!]+$/, '');
+        if (/^(yes|yeah|yep|sure|ok|okay|save it|please do|yes please)$/.test(answer)) {
+          addEntry({ speaker: 'you', text: input.trim() });
+          await confirmMemory();
+          return;
+        }
+        if (/^(no|nope|no thanks|don'?t|cancel|never mind)$/.test(answer)) {
+          addEntry({ speaker: 'you', text: input.trim() });
+          cancelMemory();
+          return;
+        }
+      }
       const command = parseExploreCommand(input);
       if (!command) return;
       addEntry({ speaker: 'you', text: input.trim() });
+      const note = command.type === 'remember' ? null : parseRememberRequest(input);
+      if (note) {
+        proposeNote(note);
+        return;
+      }
       const c = controllerRef.current;
       switch (command.type) {
         case 'start':
@@ -557,7 +634,7 @@ export function useLiveExplore() {
           await askQuestion(command.question, command.about, turnSignal);
       }
     },
-    [addEntry, askQuestion, describeNow, findObject, pause, readSign, requestRemember, resume, say, stop],
+    [addEntry, askQuestion, cancelMemory, confirmMemory, describeNow, findObject, pause, pendingMemory, proposeNote, readSign, requestRemember, resume, say, stop],
   );
 
   const setSpeechRouter = useCallback((router: SpeechRouter | null) => {

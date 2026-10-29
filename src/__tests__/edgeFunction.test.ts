@@ -5,8 +5,12 @@ import {
   META_API_BASE_URL,
   buildMetaRequest,
   handleRequest,
+  parseAskTextResult,
   parseFindResult,
+  parseQuickReadResult,
   parseReadResult,
+  parseSceneCheck,
+  parseTaskPlan,
   type HandlerDeps,
 } from '../../supabase/functions/openeyes-ai/core.ts';
 
@@ -177,5 +181,60 @@ describe('OpenEyes AI server function (mocked Meta API, no real network)', () =>
     expect(text).toMatch(/5 minutes/);
     expect(text).toMatch(/NOT current observations/);
     expect(text).toContain('My keys are usually on the hook.');
+  });
+});
+
+describe('openeyes-ai Phase 5-7 tasks', () => {
+  it('keeps unreadable quick reads empty instead of guessing', () => {
+    expect(parseQuickReadResult('{"readable":false,"keyText":"maybe Aspirin","reason":"Too blurry"}')).toMatchObject({
+      readable: false,
+      keyText: '',
+      reason: 'Too blurry',
+    });
+    expect(parseQuickReadResult('```json\n{"readable":true,"documentType":"label","keyText":"Aspirin 300mg","summary":"A medicine label."}\n```')).toMatchObject({
+      readable: true,
+      keyText: 'Aspirin 300mg',
+    });
+  });
+
+  it('requires a known answer basis for document questions', () => {
+    expect(parseAskTextResult('{"answer":"November 15","basis":"exact","quote":"Reply by November 15"}').basis).toBe('exact');
+    expect(parseAskTextResult('{"answer":"Not stated","basis":"not_found","quote":"ignored"}').quote).toBe('');
+    expect(() => parseAskTextResult('{"answer":"Probably Tuesday","basis":"guess"}')).toThrow();
+  });
+
+  it('caps task plans and rejects malformed ones', () => {
+    const many = JSON.stringify({ steps: Array.from({ length: 30 }, (_, i) => `Step ${i}`) });
+    expect(parseTaskPlan(many).steps.length).toBe(LIMITS.planSteps);
+    expect(() => parseTaskPlan('{"steps":"boil water"}')).toThrow();
+  });
+
+  it('defaults scene checks to low confidence and known categories', () => {
+    const scene = parseSceneCheck('{"summary":"A doorway.","changes":[{"category":"teleport","text":"Something"}],"objects":["door"]}');
+    expect(scene.confidence).toBe('low');
+    expect(scene.changes[0].category).toBe('other');
+    expect(() => parseSceneCheck('{"summary":""}')).toThrow();
+  });
+
+  it('validates the new request fields before calling Meta', async () => {
+    const d = deps();
+    expect((await handleRequest(post({ task: 'ask_text', image: IMAGE }), d)).status).toBe(400);
+    expect((await handleRequest(post({ task: 'task_plan' }), d)).status).toBe(400);
+    expect((await handleRequest(post({ task: 'scene_check' }), d)).status).toBe(400);
+    expect(d.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('tells Meta AI never to call a route safe in scene checks and returns a structured plan', async () => {
+    const fetchImpl = vi.fn(async () => metaReply('{"steps":["Fill the kettle.","Boil the water."]}')) as unknown as typeof fetch;
+    const res = await handleRequest(post({ task: 'task_plan', taskName: 'make coffee' }), deps({ fetchImpl }));
+    expect(await res.json()).toMatchObject({ task: 'task_plan', plan: { steps: ['Fill the kettle.', 'Boil the water.'] } });
+    const request = buildMetaRequest(
+      { task: 'scene_check', responseLength: 'brief', image: IMAGE, previousSummary: 'A hallway.', messages: [], memories: [] },
+      'muse-spark-1.3',
+      new Date(),
+    );
+    const text = JSON.stringify(request);
+    expect(text).toMatch(/Never say a path/);
+    expect(text).toContain('A hallway.');
   });
 });

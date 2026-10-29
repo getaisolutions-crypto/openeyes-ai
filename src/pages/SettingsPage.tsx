@@ -8,14 +8,32 @@ import { OptionGroup, Switch } from '../components/FormControls';
 import { useSettings } from '../hooks/useSettings';
 import { useAnnouncer } from '../hooks/useAnnouncer';
 import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
-import { EXPLORE_INTERVALS, EXPLORE_SESSION_MINUTES, SPEECH_RATE } from '../services/settings/settingsStorage';
+import { EXPLORE_INTERVALS, EXPLORE_SESSION_MINUTES, SCENE_ALERT_CATEGORIES, SPEECH_RATE } from '../services/settings/settingsStorage';
 import { MODE_LABELS } from '../hooks/useLiveExplore';
 import { VoiceSelect } from '../components/VoiceSelect';
 import { META_MODELS } from '../services/ai/metaModels';
 import { MetaConnectionCheck } from '../components/MetaConnectionCheck';
 import { AppUpdatesPanel } from '../components/AppUpdatesPanel';
 import { clearAllAppData } from '../utils/storage';
-import type { AssistanceMode, ExploreMode, ProactiveFrequency, SpeechRecognitionChoice, TextSize, Theme } from '../types/settings';
+import type {
+  AssistanceMode,
+  ExploreMode,
+  ProactiveFrequency,
+  SceneAlertCategory,
+  SceneAlertDetail,
+  SceneAlertFrequency,
+  SpeechRecognitionChoice,
+  TextSize,
+  Theme,
+} from '../types/settings';
+
+const SCENE_CATEGORY_LABELS: Record<SceneAlertCategory, string> = {
+  person: 'People in view',
+  door: 'Doors',
+  stairs: 'Stairs or steps',
+  'new-area': 'Camera pointed at a new area',
+  object: 'Objects appearing or moving in the image',
+};
 import type { ResponseLength } from '../types/ai';
 
 function Section({ title, badge, children }: { title: string; badge?: ReactNode; children: ReactNode }) {
@@ -218,6 +236,68 @@ export default function SettingsPage() {
           description="Live Explore stops by itself after this time, or after 60 frames, to protect your battery, data and privacy."
           options={EXPLORE_SESSION_MINUTES.map((m) => ({ value: String(m), label: `${m} minutes` }))}
         />
+      </Section>
+
+      <Section title="Environmental awareness" badge={<PlannedBadge label="Experimental" />}>
+        <div className="py-3">
+          <Notice variant="warning" title="Not a mobility aid">
+            Scene announcements describe what a camera photo appears to show every so often. They can be late, wrong or
+            missing. OpenEyes never says a path is clear or safe and never tells you when to move. Keep using your cane,
+            guide dog and mobility training.
+          </Notice>
+        </div>
+        <Switch
+          label="Enable scene change announcements"
+          description="While Live Explore runs in Smart Explore or Continuous mode, briefly mention visible changes such as a person or an open door. Off by default."
+          checked={settings.sceneAlerts}
+          onChange={(v) => set('sceneAlerts', v, `Scene change announcements ${v ? 'on' : 'off'}.`)}
+        />
+        <Switch
+          label="Pause announcements"
+          description="Keeps your choices but stops announcements until you turn this off."
+          checked={settings.sceneAlertsPaused}
+          disabled={!settings.sceneAlerts}
+          onChange={(v) => set('sceneAlertsPaused', v, `Announcements ${v ? 'paused' : 'resumed'}.`)}
+        />
+        <OptionGroup<SceneAlertFrequency>
+          legend="Announcement frequency"
+          name="scene-alert-frequency"
+          value={settings.sceneAlertFrequency}
+          onChange={(v) => set('sceneAlertFrequency', v, 'Announcement frequency changed.')}
+          description="The shortest gap between two announcements. Your questions always come first."
+          options={[
+            { value: 'low', label: 'Rarely', description: 'At most one every 90 seconds' },
+            { value: 'medium', label: 'Sometimes', description: 'At most one every 45 seconds' },
+            { value: 'high', label: 'Often', description: 'At most one every 20 seconds' },
+          ]}
+        />
+        <OptionGroup<SceneAlertDetail>
+          legend="Description detail"
+          name="scene-alert-detail"
+          value={settings.sceneAlertDetail}
+          onChange={(v) => set('sceneAlertDetail', v, 'Announcement detail changed.')}
+          options={[
+            { value: 'brief', label: 'Brief', description: 'Only the change, for example "A door appears open."' },
+            { value: 'detailed', label: 'Detailed', description: 'The change followed by a short description of the view' },
+          ]}
+        />
+        <fieldset className="py-3">
+          <legend className="text-lg font-bold">Alert categories</legend>
+          {SCENE_ALERT_CATEGORIES.map((c) => (
+            <Switch
+              key={c}
+              label={SCENE_CATEGORY_LABELS[c]}
+              checked={settings.sceneAlertCategories.includes(c)}
+              onChange={(v) =>
+                set(
+                  'sceneAlertCategories',
+                  v ? [...settings.sceneAlertCategories, c] : settings.sceneAlertCategories.filter((x) => x !== c),
+                  `${SCENE_CATEGORY_LABELS[c]} alerts ${v ? 'on' : 'off'}.`,
+                )
+              }
+            />
+          ))}
+        </fieldset>
       </Section>
 
       <Section title="Assistant">

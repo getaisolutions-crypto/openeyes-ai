@@ -13,6 +13,11 @@ export const LIMITS = {
   objectName: 80,
   memories: 5,
   memoryChars: 1000,
+  question: 300,
+  taskName: 120,
+  previousSummary: 1000,
+  planSteps: 12,
+  stepChars: 240,
 } as const;
 
 export const corsHeaders = {
@@ -21,7 +26,9 @@ export const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-export type Task = "describe" | "find" | "read" | "chat";
+export type Task = "describe" | "find" | "read" | "chat" | "quick_read" | "ask_text" | "task_plan" | "scene_check";
+export type AnswerBasis = "exact" | "summary" | "inference" | "not_found";
+export type SceneChangeCategory = "person" | "door" | "stairs" | "new_area" | "object" | "other";
 export type ResponseLength = "brief" | "standard" | "detailed";
 export type Visibility = "visible" | "not_visible" | "uncertain";
 export type Confidence = "high" | "medium" | "low";
@@ -52,8 +59,32 @@ export interface ValidRequest {
   responseLength: ResponseLength;
   image?: { dataUrl: string; capturedAt?: string };
   objectName?: string;
+  question?: string;
+  taskName?: string;
+  previousSummary?: string;
   messages: ChatTurn[];
   memories: string[];
+}
+
+export interface QuickReadResult {
+  readable: boolean;
+  documentType: string;
+  keyText: string;
+  summary: string;
+  reason: string;
+}
+
+export interface AskTextResult {
+  answer: string;
+  basis: AnswerBasis;
+  quote: string;
+}
+
+export interface SceneCheckResult {
+  summary: string;
+  objects: string[];
+  changes: { category: SceneChangeCategory; text: string }[];
+  confidence: Confidence;
 }
 
 export interface FindResult {
@@ -84,7 +115,8 @@ class HttpError extends Error {
 }
 
 const IMAGE_DATA_URL = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
-const TASKS: Task[] = ["describe", "find", "read", "chat"];
+const TASKS: Task[] = ["describe", "find", "read", "chat", "quick_read", "ask_text", "task_plan", "scene_check"];
+const IMAGE_TASKS: Task[] = ["describe", "find", "read", "quick_read", "ask_text", "scene_check"];
 const LENGTHS: ResponseLength[] = ["brief", "standard", "detailed"];
 
 function clean(value: string, max: number): string {
@@ -121,7 +153,24 @@ export function validateRequest(body: unknown): ValidRequest {
       : undefined;
     image = { dataUrl: img.dataUrl, capturedAt };
   }
-  if ((task === "describe" || task === "find" || task === "read") && !image) invalid("A photo is required.");
+  if (IMAGE_TASKS.includes(task) && !image) invalid("A photo is required.");
+
+  let question: string | undefined;
+  if (task === "ask_text") {
+    question = typeof b.question === "string" ? clean(b.question.replace(/[\n\r]/g, " "), LIMITS.question) : "";
+    if (!question) invalid("Ask a question about the text.");
+  }
+
+  let taskName: string | undefined;
+  if (task === "task_plan") {
+    taskName = typeof b.taskName === "string" ? clean(b.taskName.replace(/["\n\r]/g, " "), LIMITS.taskName) : "";
+    if (!taskName) invalid("Say which task you need help with.");
+  }
+
+  let previousSummary: string | undefined;
+  if (task === "scene_check" && typeof b.previousSummary === "string") {
+    previousSummary = clean(b.previousSummary.replace(/[\n\r]/g, " "), LIMITS.previousSummary) || undefined;
+  }
 
   let objectName: string | undefined;
   if (task === "find") {
@@ -155,7 +204,7 @@ export function validateRequest(body: unknown): ValidRequest {
         .slice(0, LIMITS.memories)
     : [];
 
-  return { task, responseLength, image, objectName, messages, memories };
+  return { task, responseLength, image, objectName, question, taskName, previousSummary, messages, memories };
 }
 
 const SAFETY_RULES = `You are OpenEyes, an assistant for blind and low-vision people.
@@ -247,7 +296,8 @@ You help the user check whether a specific item is visible in a photo.
 Reply with only a JSON object, no other text, in this exact shape:
 {"visibility":"visible"|"not_visible"|"uncertain","position":"...","confidence":"high"|"medium"|"low","suggestion":"..."}
 - "visible" only if you can actually see the item. If you cannot see it, use "not_visible". If something might be the item but you cannot tell, use "uncertain".
-- "position": one short sentence saying where it is in the photo relative to other visible things. Empty string if not visible.
+- "position": one short sentence saying where it is in the photo, using camera-relative words such as on the left of the image, on the right, near the centre, at the top, at the bottom, beside, behind, on top of or under another visible object. Example: "on the table, near the laptop, on the left of the image". Empty string if not visible.
+- Never say the item is reachable, close, far, or safe to approach.
 - "suggestion": one short practical next step, such as moving the camera, adding light, or taking a closer photo.
 - No distances.`,
         },
@@ -255,6 +305,95 @@ Reply with only a JSON object, no other text, in this exact shape:
           role: "user",
           content: [{ type: "text", text: `Item to look for: "${req.objectName}".` }, imagePart(req.image!.dataUrl)],
         },
+      ],
+    };
+  }
+
+  if (req.task === "quick_read") {
+    return {
+      model,
+      max_completion_tokens: maxTokens,
+      messages: [
+        {
+          role: "system",
+          content: `You help a blind user understand printed text in a photo, such as letters, receipts, product labels, menus, instructions, signs, forms, packaging or simple tables.
+Reply with only a JSON object, no other text, in this exact shape:
+{"readable":true|false,"documentType":"...","keyText":"...","summary":"...","reason":"..."}
+- "keyText": only the most important text, copied exactly as written (titles, names, dates, amounts, warnings). Use line breaks between items. Write [unreadable] for parts you cannot read. Never guess or complete words.
+- "documentType": one or two words, for example "letter", "receipt", "product label", "menu", "sign", or "unknown".
+- "summary": one short plain sentence saying what the document seems to be. This is your interpretation, not a quotation.
+- If the text is too blurry, dark, cut off or small to read reliably, set "readable" to false, leave keyText empty, and explain why in "reason" (for example "The photo is blurry").`,
+        },
+        { role: "user", content: [{ type: "text", text: "What are the most important things written here?" }, imagePart(req.image!.dataUrl)] },
+      ],
+    };
+  }
+
+  if (req.task === "ask_text") {
+    return {
+      model,
+      max_completion_tokens: maxTokens,
+      messages: [
+        {
+          role: "system",
+          content: `You answer a blind user's question about the printed text in a photo. Use only what is written in the photo.
+Reply with only a JSON object, no other text, in this exact shape:
+{"answer":"...","basis":"exact"|"summary"|"inference"|"not_found","quote":"..."}
+- "exact": the answer is stated directly in the text. Put the exact words in "quote".
+- "summary": you condensed several parts of the text. "quote" may be empty.
+- "inference": the text does not say it directly and you reasoned from it. Say so in the answer.
+- "not_found": the text does not contain the answer, or it is unreadable. Never guess.
+- "answer": one or two short spoken sentences, no markdown. Never invent words that are not readable.`,
+        },
+        {
+          role: "user",
+          content: [{ type: "text", text: `Question about this document: "${req.question}"` }, imagePart(req.image!.dataUrl)],
+        },
+      ],
+    };
+  }
+
+  if (req.task === "task_plan") {
+    return {
+      model,
+      max_completion_tokens: maxTokens,
+      messages: [
+        {
+          role: "system",
+          content: `You write short step-by-step instructions for a blind or low-vision person doing an everyday task at home.
+Reply with only a JSON object, no other text, in this exact shape:
+{"steps":["...","..."]}
+- 3 to ${LIMITS.planSteps} steps, each one short spoken sentence, no numbering, no markdown.
+- Prefer touch, sound and smell cues over visual cues.
+- Include a short caution in the relevant step when heat, sharp objects, electricity or chemicals are involved.
+- Never claim you can see the user. Never give street, travel or navigation directions; if the task needs them, return {"steps":[]}.
+- If the request is not an everyday task you can describe safely, return {"steps":[]}.`,
+        },
+        { role: "user", content: `Task: "${req.taskName}"` },
+      ],
+    };
+  }
+
+  if (req.task === "scene_check") {
+    const previous = req.previousSummary
+      ? `The previous camera image was summarised as: "${req.previousSummary}". Compare with it.`
+      : "There is no previous image to compare with.";
+    return {
+      model,
+      max_completion_tokens: maxTokens,
+      messages: [
+        {
+          role: "system",
+          content: `${SAFETY_RULES}
+You compare a new camera image with a previous summary for a blind user.
+Reply with only a JSON object, no other text, in this exact shape:
+{"summary":"...","objects":["..."],"changes":[{"category":"person"|"door"|"stairs"|"new_area"|"object"|"other","text":"..."}],"confidence":"high"|"medium"|"low"}
+- "summary": one short sentence about what the current image shows.
+- "objects": up to 8 main visible things, a few words each.
+- "changes": only differences clearly supported by the image, written as what the current image shows, for example "The current image shows a person near the doorway." Use "new_area" when the camera seems to point somewhere else. Do not describe the camera moving as objects moving. Never mention speed, direction of travel or what will happen next. Empty list if nothing meaningful changed or there is no previous summary.
+- Never say a path is clear or safe, never say there are no obstacles, never give movement instructions.`,
+        },
+        { role: "user", content: [{ type: "text", text: previous }, imagePart(req.image!.dataUrl)] },
       ],
     };
   }
@@ -311,6 +450,73 @@ export function parseFindResult(content: string): FindResult {
   const position = visibility === "not_visible" || typeof parsed.position !== "string" ? "" : clean(parsed.position, 400);
   const suggestion = typeof parsed.suggestion === "string" ? clean(parsed.suggestion, 400) : "";
   return { visibility, position, confidence, suggestion };
+}
+
+function parseJsonObject(content: string): Record<string, unknown> {
+  const match = content.match(/\{[\s\S]*\}/);
+  if (!match) throw new HttpError(502, "meta_bad_response", "The AI answer could not be understood.");
+  try {
+    const parsed = JSON.parse(match[0]);
+    if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+  } catch {
+    // fall through
+  }
+  throw new HttpError(502, "meta_bad_response", "The AI answer could not be understood.");
+}
+
+function str(value: unknown, max: number): string {
+  return typeof value === "string" ? value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim().slice(0, max) : "";
+}
+
+export function parseQuickReadResult(content: string): QuickReadResult {
+  const p = parseJsonObject(content);
+  const keyText = str(p.keyText, 4000);
+  const readable = p.readable === true && keyText.length > 0;
+  return {
+    readable,
+    documentType: str(p.documentType, 40) || "unknown",
+    keyText: readable ? keyText : "",
+    summary: readable ? str(p.summary, 400) : "",
+    reason: readable ? "" : str(p.reason, 200),
+  };
+}
+
+const BASES: AnswerBasis[] = ["exact", "summary", "inference", "not_found"];
+
+export function parseAskTextResult(content: string): AskTextResult {
+  const p = parseJsonObject(content);
+  const answer = str(p.answer, 800);
+  const basis = BASES.find((b) => b === p.basis);
+  if (!answer || !basis) throw new HttpError(502, "meta_bad_response", "The AI answer could not be understood.");
+  return { answer, basis, quote: basis === "not_found" ? "" : str(p.quote, 800) };
+}
+
+export function parseTaskPlan(content: string): { steps: string[] } {
+  const p = parseJsonObject(content);
+  if (!Array.isArray(p.steps)) throw new HttpError(502, "meta_bad_response", "The AI answer could not be understood.");
+  const steps = p.steps.map((s) => str(s, LIMITS.stepChars)).filter(Boolean).slice(0, LIMITS.planSteps);
+  return { steps };
+}
+
+const CATEGORIES: SceneChangeCategory[] = ["person", "door", "stairs", "new_area", "object", "other"];
+
+export function parseSceneCheck(content: string): SceneCheckResult {
+  const p = parseJsonObject(content);
+  const summary = str(p.summary, 400);
+  if (!summary) throw new HttpError(502, "meta_bad_response", "The AI answer could not be understood.");
+  const objects = Array.isArray(p.objects) ? p.objects.map((o) => str(o, 60)).filter(Boolean).slice(0, 8) : [];
+  const changes = Array.isArray(p.changes)
+    ? p.changes
+        .map((c) => {
+          const item = (c ?? {}) as Record<string, unknown>;
+          const category = CATEGORIES.find((k) => k === item.category) ?? "other";
+          return { category, text: str(item.text, 240) };
+        })
+        .filter((c) => c.text)
+        .slice(0, 4)
+    : [];
+  const confidence = (["high", "medium", "low"] as const).find((c) => c === p.confidence) ?? "low";
+  return { summary, objects, changes, confidence };
 }
 
 const NO_TEXT = "NO_READABLE_TEXT";
@@ -424,6 +630,10 @@ export async function handleRequest(req: Request, deps: HandlerDeps): Promise<Re
 
     if (valid.task === "find") return json(200, { task: "find", model: usedModel, find: parseFindResult(content) });
     if (valid.task === "read") return json(200, { task: "read", model: usedModel, ...parseReadResult(content) });
+    if (valid.task === "quick_read") return json(200, { task: valid.task, model: usedModel, quickRead: parseQuickReadResult(content) });
+    if (valid.task === "ask_text") return json(200, { task: valid.task, model: usedModel, answer: parseAskTextResult(content) });
+    if (valid.task === "task_plan") return json(200, { task: valid.task, model: usedModel, plan: parseTaskPlan(content) });
+    if (valid.task === "scene_check") return json(200, { task: valid.task, model: usedModel, scene: parseSceneCheck(content) });
     return json(200, { task: valid.task, model: usedModel, text: content });
   } catch (error) {
     if (error instanceof HttpError) {

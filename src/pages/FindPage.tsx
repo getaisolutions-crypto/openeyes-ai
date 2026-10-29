@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useId, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Brain, Search } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Brain, MapPin, Search } from 'lucide-react';
 import { PageHeader } from '../components/PageHeader';
 import { CameraCapture } from '../components/CameraCapture';
 import { MicButton } from '../components/MicButton';
 import { Notice } from '../components/Notice';
 import { AIPending } from '../components/AIResult';
 import { FindResultCard, describeFindResult } from '../components/FindResultCard';
+import { LiveObjectSearch } from '../components/find/LiveObjectSearch';
+import { SaveLocationDialog } from '../components/find/SaveLocationDialog';
+import { findRememberedLocation, isConfidentMatch, phraseRememberedLocation } from '../services/find/objectSearch';
 import { useServices } from '../services/ServicesContext';
 import { useAnnouncer } from '../hooks/useAnnouncer';
 import { useAIRequest } from '../hooks/useAIRequest';
@@ -22,9 +25,13 @@ export default function FindPage() {
   const { objectDetection, memory } = useServices();
   const { announce } = useAnnouncer();
   const inputId = useId();
-  const [query, setQuery] = useState('');
+  const location = useLocation();
+  const initialItem = (location.state as { object?: unknown } | null)?.object;
+  const [query, setQuery] = useState(typeof initialItem === 'string' ? initialItem.slice(0, LIMITS.objectQuery) : '');
   const [image, setImage] = useState<CapturedImage | null>(null);
   const [related, setRelated] = useState<Memory[]>([]);
+  const [saveLocation, setSaveLocation] = useState<string | null>(null);
+  const [memoryVersion, setMemoryVersion] = useState(0);
   const request = useAIRequest<ObjectDetectionResult>();
   const { reset } = request;
   const speech = useSpeechRecognition({ onFinal: (text) => setQuery(text.slice(0, LIMITS.objectQuery)) });
@@ -64,7 +71,10 @@ export default function FindPage() {
     return () => {
       cancelled = true;
     };
-  }, [term, memory]);
+  }, [term, memory, memoryVersion]);
+
+  const remembered = term ? findRememberedLocation(related, term) : null;
+  const otherMemories = related.filter((m) => m.id !== remembered?.id);
 
   return (
     <>
@@ -139,15 +149,23 @@ export default function FindPage() {
             <Brain aria-hidden="true" className="h-6 w-6 text-primary" /> From your memories
           </h2>
           <p className="mt-1 text-sm text-muted">Notes you saved earlier. They are not what the camera sees now.</p>
-          {related.length > 0 ? (
+          {remembered && (
+            <div className="mt-3 rounded-xl border border-primary/40 bg-primary/10 p-3">
+              <p className="flex items-center gap-2 text-sm font-bold">
+                <MapPin aria-hidden="true" className="h-4 w-4" /> Last saved location
+              </p>
+              <p className="mt-1 text-lg">{phraseRememberedLocation(remembered, term)}</p>
+            </div>
+          )}
+          {otherMemories.length > 0 ? (
             <ul className="mt-3 space-y-2">
-              {related.map((m) => (
+              {otherMemories.map((m) => (
                 <li key={m.id} className="rounded-xl bg-surface-2 p-3 text-lg">
                   {m.text}
                 </li>
               ))}
             </ul>
-          ) : (
+          ) : remembered ? null : (
             <p className="mt-2 text-muted">
               No saved memories mention &ldquo;{term}&rdquo;.{' '}
               <Link to="/memory" className="font-bold text-primary underline underline-offset-4">
@@ -158,7 +176,12 @@ export default function FindPage() {
         </section>
       )}
 
-      <div className="mt-4">
+      {detection.available && (
+        <LiveObjectSearch item={term} disabled={!term} onRememberLocation={(where) => setSaveLocation(where)} />
+      )}
+
+      <h2 className="mt-6 text-xl font-bold">Or check one photo</h2>
+      <div className="mt-3">
         <CameraCapture subject="the area to search" onImageChange={onImageChange} />
       </div>
       <button
@@ -187,6 +210,23 @@ export default function FindPage() {
       )}
 
       {request.state.status === 'success' && <FindResultCard result={request.state.result} />}
+      {request.state.status === 'success' && isConfidentMatch(request.state.result) && (
+        <button
+          type="button"
+          className="btn-secondary mt-3 w-full"
+          onClick={() => setSaveLocation(request.state.status === 'success' ? request.state.result.positionDescription : '')}
+        >
+          Remember this location
+        </button>
+      )}
+
+      <SaveLocationDialog
+        open={saveLocation !== null}
+        item={term}
+        initialLocation={saveLocation ?? ''}
+        onClose={() => setSaveLocation(null)}
+        onSaved={() => setMemoryVersion((v) => v + 1)}
+      />
     </>
   );
 }

@@ -6,7 +6,7 @@ import { useAnnouncer } from '../hooks/useAnnouncer';
 import { ImageUploadError, imageFromFile } from '../services/camera/imageUpload';
 import { Notice } from './Notice';
 
-const CAMERA_ERRORS: Record<CameraErrorKind, { title: string; body: string }> = {
+export const CAMERA_ERRORS: Record<CameraErrorKind, { title: string; body: string }> = {
   unsupported: { title: 'Camera not supported', body: 'This browser cannot use the camera. Try Chrome on Android.' },
   'insecure-context': {
     title: 'Camera unavailable',

@@ -29,6 +29,8 @@ export interface ChatMessage {
   photoAttached?: boolean;
   /** Number of saved memories shared as background for this answer. */
   memoriesShared?: number;
+  /** Replies OpenEyes produced on the device: from saved memories, a guided task, or app navigation. */
+  source?: 'memory' | 'task' | 'app';
 }
 
 export interface ChatRequest {
@@ -60,6 +62,7 @@ export interface AIProvider {
   readonly id: string;
   getStatus(): ProviderStatus;
   sendMessage(request: ChatRequest): Promise<ChatResponse>;
+  planTask(taskName: string, options?: { signal?: AbortSignal }): Promise<TaskPlanResult>;
   checkConnection(signal?: AbortSignal): Promise<ConnectionCheck>;
 }
 
@@ -77,12 +80,59 @@ export interface TextReadingResult {
   modelVersion?: string;
 }
 
+/** Quick Read keeps exact key text separate from the model's interpretation. */
+export interface QuickReadResult {
+  readable: boolean;
+  documentType: string;
+  /** Exact text copied from the image. */
+  keyText: string;
+  /** AI interpretation, never a quotation. */
+  summary: string;
+  /** Why the text could not be read, when readable is false. */
+  reason: string;
+  modelId: MetaModelId;
+  modelVersion?: string;
+}
+
+export type AnswerBasis = 'exact' | 'summary' | 'inference' | 'not-found';
+
+export interface DocumentAnswer {
+  answer: string;
+  basis: AnswerBasis;
+  quote: string;
+  modelId: MetaModelId;
+  modelVersion?: string;
+}
+
+export type SceneChangeCategory = 'person' | 'door' | 'stairs' | 'new-area' | 'object' | 'other';
+
+export interface SceneCheckResult {
+  summary: string;
+  objects: string[];
+  changes: { category: SceneChangeCategory; text: string }[];
+  confidence: ConfidenceLevel;
+  modelId: MetaModelId;
+  modelVersion?: string;
+}
+
+export interface TaskPlanResult {
+  steps: string[];
+  modelId: MetaModelId;
+  modelVersion?: string;
+}
+
 /** Image understanding (Muse Spark multimodal through the OpenEyes server). */
 export interface VisionProvider {
   readonly id: string;
   getStatus(): ProviderStatus;
   describeScene(image: CapturedImage, options: { responseLength: ResponseLength; signal?: AbortSignal }): Promise<SceneDescription>;
   readText(image: CapturedImage, options?: { signal?: AbortSignal }): Promise<TextReadingResult>;
+  quickRead(image: CapturedImage, options?: { signal?: AbortSignal }): Promise<QuickReadResult>;
+  askAboutText(image: CapturedImage, question: string, options?: { signal?: AbortSignal }): Promise<DocumentAnswer>;
+  checkScene(
+    image: CapturedImage,
+    options: { previousSummary?: string; signal?: AbortSignal },
+  ): Promise<SceneCheckResult>;
 }
 
 export interface NormalizedBox {

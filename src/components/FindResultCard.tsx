@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { CheckCircle2, HelpCircle, XCircle } from 'lucide-react';
 import type { ObjectDetectionResult } from '../types/ai';
 import { SafetyNote, SpeechControls } from './AIResult';
@@ -16,6 +17,7 @@ export function describeFindResult(result: ObjectDetectionResult): string {
 }
 
 export function FindResultCard({ result }: { result: ObjectDetectionResult }) {
+  const headingId = useId();
   const Icon = result.visibility === 'visible' ? CheckCircle2 : result.visibility === 'not-visible' ? XCircle : HelpCircle;
   const tone =
     result.visibility === 'visible' ? 'text-success' : result.visibility === 'not-visible' ? 'text-danger' : 'text-warning';
@@ -23,8 +25,8 @@ export function FindResultCard({ result }: { result: ObjectDetectionResult }) {
     result.visibility === 'visible' ? 'Probably in the photo' : result.visibility === 'not-visible' ? 'Not seen' : 'Not sure';
 
   return (
-    <section aria-labelledby="find-result-heading" className="card mt-4 p-5 animate-fade-up">
-      <h2 id="find-result-heading" className="flex items-center gap-2 text-xl font-bold">
+    <section aria-labelledby={headingId} className="card mt-4 p-5 animate-fade-up">
+      <h2 id={headingId} className="flex items-center gap-2 text-xl font-bold">
         <Icon aria-hidden="true" className={`h-6 w-6 ${tone}`} /> {headline}: {result.query}
       </h2>
       <dl className="mt-3 space-y-3 text-lg">

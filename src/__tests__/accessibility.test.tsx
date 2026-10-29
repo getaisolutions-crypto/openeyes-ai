@@ -69,10 +69,10 @@ describe('assistant honesty', () => {
     await user.click(mic);
     expect(screen.getByRole('button', { name: 'Stop listening' })).toHaveAttribute('aria-pressed', 'true');
     act(() => {
-      handlers!.onFinal('Where are my keys');
+      handlers!.onFinal('What time does the bakery open');
       handlers!.onEnd();
     });
-    expect(await screen.findByText('Where are my keys')).toBeInTheDocument();
+    expect(await screen.findByText('What time does the bakery open')).toBeInTheDocument();
     expect(await screen.findByText('OpenEyes could not answer')).toBeInTheDocument();
   });
 });
