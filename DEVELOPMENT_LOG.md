@@ -1,5 +1,34 @@
 # OpenEyes AI - Development Log
 
+## 2026-10-31 - Android app: AI backend configuration fix
+
+**Reported:** on a Galaxy S24 the glasses registered, connected, the session was active and the capture sound
+played, then the app said "Meta AI is not set up on the OpenEyes server yet".
+
+**Investigation:** the website and the app call the same function (`POST /functions/v1/openeyes-ai`, anon key in
+`Authorization` and `apikey`, body `{task, image:{dataUrl, capturedAt}, messages|responseLength}`, reply
+`{task, model, text}`). The server was checked live: GET reported `configured: true` (model `muse-spark-1.3`) and a
+POST in the exact Android format with a real JPEG returned 200 with a description.
+
+**Root cause:** the Android client raised its own "not configured" error, worded as a server problem, when the APK
+was built with an empty server address or public key. Those came only from `local.properties`, which a GitHub
+clone does not have (and the root `.env` is git-ignored), so no request ever left the phone. A bare HTTP 503 was
+also mislabelled the same way.
+
+**Fix:**
+- New app-side error and message ("built without the OpenEyes server address"); the server message is used only
+  when the server returns `not_configured`. Bare 503 is now a generic server error.
+- Gradle reads the server address and public key from `local.properties`, environment variables, or the website's
+  root `.env`, and refuses to assemble or install an APK without them.
+- Debug-only diagnostics (Logcat tag `OpenEyes`): configuration presence, capture result and JPEG size, request
+  URL and task, HTTP status and time, server error code, parse result. No keys or image data.
+- Restored `android/.gitignore`. Unit tests added for all of the above.
+
+**Not changed:** server function, website, registration, connection, camera, session and audio code.
+
+**Tests:** web typecheck, tests and build in Bolt; live server GET/POST. Android unit tests and Gradle build cannot
+run in Bolt (no JDK, Android SDK or Gradle). No physical glasses testing was done in Bolt.
+
 ## 2026-10-30 - Phase 8: Ray-Ban Meta Gen 2 Android companion (v0.6.0 of the Android app)
 
 ### Added

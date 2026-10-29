@@ -37,6 +37,8 @@ object AssistantMessages {
     }
 
     fun forBackend(kind: BackendErrorKind): String = when (kind) {
+        BackendErrorKind.APP_NOT_CONFIGURED ->
+            "This copy of OpenEyes Glasses was built without the OpenEyes server address, so nothing was sent. Rebuild the app as described in the setup guide."
         BackendErrorKind.NOT_CONFIGURED -> "Meta AI is not set up on the OpenEyes server yet, so OpenEyes cannot answer."
         BackendErrorKind.AUTH -> "The OpenEyes server could not sign in to Meta AI."
         BackendErrorKind.RATE_LIMITED -> "Too many requests right now. Please wait a minute and try again."
@@ -78,6 +80,7 @@ class SceneAssistant(
     private val backend: VisionBackend,
     private val speaker: Speaker,
     private val scope: CoroutineScope,
+    private val log: DiagnosticLog = DiagnosticLog.NONE,
 ) {
     private val _phase = MutableStateFlow(AssistantPhase.IDLE)
     val phase: StateFlow<AssistantPhase> = _phase.asStateFlow()
@@ -114,11 +117,13 @@ class SceneAssistant(
             speaker.speak(AssistantMessages.LOOKING, SpeechKind.STATUS)
             val photo = when (val outcome = glasses.captureJpeg()) {
                 is CaptureOutcome.Failed -> {
+                    log.log("capture: failed reason=${outcome.reason} detail=${outcome.detail ?: "none"}")
                     say(AssistantMessages.forCapture(outcome.reason), SpeechKind.ERROR)
                     return
                 }
                 is CaptureOutcome.Photo -> outcome
             }
+            log.log("capture: ok jpegBytes=${photo.jpeg.size}")
             currentCoroutineContext().ensureActive()
             _phase.value = AssistantPhase.ANALYZING
             val text = if (QuestionRouting.isDescribe(question)) {
@@ -137,8 +142,10 @@ class SceneAssistant(
         } catch (e: CancellationException) {
             throw e
         } catch (e: BackendException) {
+            log.log("assistant: backend error kind=${e.kind}")
             say(AssistantMessages.forBackend(e.kind), SpeechKind.ERROR)
         } catch (e: Exception) {
+            log.log("assistant: unexpected ${e.javaClass.simpleName}")
             say(AssistantMessages.forBackend(BackendErrorKind.SERVER), SpeechKind.ERROR)
         } finally {
             _phase.value = AssistantPhase.IDLE

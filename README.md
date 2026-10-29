@@ -676,8 +676,10 @@ speaks the answer. A spoken question can be asked with the Ask a question button
 - No wake word ("Hey OpenEyes" is not supported). Toolkit speech, audio streaming and voice invocations are
   experimental and not used.
 - Speech plays through the phone's audio route; whether it reaches the glasses speakers is not verified.
-- **Not compiled and not tested on hardware** (no Android tooling where it was written). JVM unit tests are written
-  but have not been run.
+- The server address and public key are taken from the website's `.env` (or `local.properties`); the APK build stops
+  if they are missing. Debug builds log request diagnostics under the Logcat tag `OpenEyes` (no keys, no image data).
+- Registration, connection, session and capture were confirmed by the owner on a Galaxy S24. Spoken answers after
+  the server-configuration fix have not yet been confirmed on hardware. JVM unit tests have not been run in Bolt.
 
 Setup, SDK findings and the exact Galaxy S24 test steps: `android/README.md`. The web build ignores this folder.
 

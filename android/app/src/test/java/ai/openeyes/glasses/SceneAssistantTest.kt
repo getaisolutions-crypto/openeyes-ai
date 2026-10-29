@@ -137,6 +137,28 @@ class SceneAssistantTest {
     }
 
     @Test
+    fun `an app built without server details says so instead of blaming the server`() = runTest {
+        backend.failures += BackendException(BackendErrorKind.APP_NOT_CONFIGURED)
+        assistant().ask(null)
+        advanceUntilIdle()
+        val message = speaker.errors.single()
+        assertTrue(message.contains("built without the OpenEyes server address"))
+        assertFalse(message.contains("not set up on the OpenEyes server"))
+    }
+
+    @Test
+    fun `capture size and failures are logged without image data`() = runTest {
+        val events = mutableListOf<String>()
+        val assistant = SceneAssistant(glasses, backend, speaker, this) { events += it }
+        assistant.ask(null)
+        advanceUntilIdle()
+        glasses.outcome = CaptureOutcome.Failed(CaptureFailure.CAMERA_UNAVAILABLE, "no stream")
+        assistant.ask(null)
+        advanceUntilIdle()
+        assertEquals(listOf("capture: ok jpegBytes=3", "capture: failed reason=CAMERA_UNAVAILABLE detail=no stream"), events)
+    }
+
+    @Test
     fun `unexpected failures are spoken as a generic error`() = runTest {
         backend.failures += IllegalStateException("boom")
         assistant().ask(null)

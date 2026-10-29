@@ -1,10 +1,14 @@
 # Copy to local.properties (never commit it). Android Studio also writes sdk.dir here.
 # sdk.dir=/Users/you/Library/Android/sdk
 
-# OpenEyes server function. The public key is the same public (anon) key the website uses; it is not a secret,
-# and the Meta API key never leaves the server.
-openeyes.functionUrl=https://YOUR-PROJECT.supabase.co/functions/v1/openeyes-ai
-openeyes.publicKey=YOUR_PUBLIC_ANON_KEY
+# OpenEyes server. Usually NOT needed: the build reads VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY from the
+# website's .env in the repository root, so the app calls the same openeyes-ai function as the website.
+# Set these only if that .env file is not present (for example in a fresh clone from GitHub).
+# The public key is the website's public (anon) key, not a secret; the Meta API key never leaves the server.
+# openeyes.supabaseUrl=https://<project-ref>.supabase.co
+# openeyes.publicKey=<public anon key>
+# Or give the full function address instead of openeyes.supabaseUrl:
+# openeyes.functionUrl=https://<project-ref>.supabase.co/functions/v1/openeyes-ai
 
 # Meta Wearables Developer Center credentials. Keep 0 while Developer Mode is on in the Meta AI app.
 mwdat.applicationId=0

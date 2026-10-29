@@ -6,7 +6,7 @@
     <string name="answer_heading">Last answer</string>
     <string name="answer_placeholder">No answer yet. Connect the glasses, then press What am I looking at.</string>
     <string name="glasses_error">Glasses message: %1$s</string>
-    <string name="setup_notice">OpenEyes server details are missing from this build, so answers are not available. See the setup guide.</string>
+    <string name="setup_notice">This copy of the app was built without the OpenEyes server address, so photos cannot be sent. Rebuild it as described in the setup guide.</string>
     <string name="bluetooth_needed">OpenEyes needs the Nearby devices permission to talk to your glasses. You can allow it in Android settings.</string>
     <string name="safety_note">OpenEyes describes photos. It cannot tell you whether it is safe to cross a road or move. Keep using your cane, guide dog or usual mobility skills.</string>
 

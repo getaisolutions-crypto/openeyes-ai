@@ -121,6 +121,36 @@ class OpenEyesClientTest {
     }
 
     @Test
+    fun `only the server's own not_configured code means the Meta key is missing`() = runTest {
+        expectKind(BackendErrorKind.NOT_CONFIGURED) {
+            client(RecordingTransport { HttpResponse(503, """{"error":{"code":"not_configured"}}""") }).describe(jpeg, 0)
+        }
+        expectKind(BackendErrorKind.SERVER) { client(RecordingTransport { HttpResponse(503, "Service Unavailable") }).describe(jpeg, 0) }
+    }
+
+    @Test
+    fun `diagnostics report url, status and parsing without the key or image`() = runTest {
+        val events = mutableListOf<String>()
+        val logging = OpenEyesClient(config, RecordingTransport { ok("A chair.") }, Dispatchers.Unconfined) { events += it }
+        logging.describe(jpeg, 0)
+        val failing = OpenEyesClient(
+            config,
+            RecordingTransport { HttpResponse(429, """{"error":{"code":"quota_exceeded"}}""") },
+            Dispatchers.Unconfined,
+        ) { events += it }
+        expectKind(BackendErrorKind.RATE_LIMITED) { failing.describe(jpeg, 0) }
+
+        val all = events.joinToString("\n")
+        assertTrue(all.contains(config.functionUrl))
+        assertTrue(all.contains("HTTP 200"))
+        assertTrue(all.contains("answer parsed"))
+        assertTrue(all.contains("HTTP 429"))
+        assertTrue(all.contains("serverCode=quota_exceeded"))
+        assertFalse(all.contains(config.publicKey))
+        assertFalse(all.contains("base64"))
+    }
+
+    @Test
     fun `network failures and timeouts are distinguished`() = runTest {
         expectKind(BackendErrorKind.TIMEOUT) { client(RecordingTransport { throw SocketTimeoutException() }).describe(jpeg, 0) }
         expectKind(BackendErrorKind.NETWORK) { client(RecordingTransport { throw IOException("offline") }).describe(jpeg, 0) }
@@ -129,8 +159,8 @@ class OpenEyesClientTest {
     @Test
     fun `missing server details stop the request before anything is sent`() = runTest {
         val transport = RecordingTransport { ok("x") }
-        expectKind(BackendErrorKind.NOT_CONFIGURED) { client(transport, BackendConfig("", "")).describe(jpeg, 0) }
-        expectKind(BackendErrorKind.NOT_CONFIGURED) { client(transport, BackendConfig("http://insecure.example", "k")).describe(jpeg, 0) }
+        expectKind(BackendErrorKind.APP_NOT_CONFIGURED) { client(transport, BackendConfig("", "")).describe(jpeg, 0) }
+        expectKind(BackendErrorKind.APP_NOT_CONFIGURED) { client(transport, BackendConfig("http://insecure.example", "k")).describe(jpeg, 0) }
         assertEquals(0, transport.calls)
         assertFalse(BackendConfig("http://insecure.example", "k").isComplete)
     }

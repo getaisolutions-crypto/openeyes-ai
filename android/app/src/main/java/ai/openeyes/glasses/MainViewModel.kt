@@ -30,7 +30,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val glasses = WearablesController(app, viewModelScope)
     private val speaker = AndroidSpeaker(app)
     private val listener = QuestionListener(app)
-    val assistant = SceneAssistant(glasses, OpenEyesClient(backendConfig, UrlConnectionTransport()), speaker, viewModelScope)
+    val assistant = SceneAssistant(
+        glasses,
+        OpenEyesClient(backendConfig, UrlConnectionTransport(), log = AndroidDiagnosticLog),
+        speaker,
+        viewModelScope,
+        AndroidDiagnosticLog,
+    )
 
     private val _listening = MutableStateFlow(false)
     val listening: StateFlow<Boolean> = _listening.asStateFlow()
@@ -40,6 +46,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val announcements = _announcements.receiveAsFlow()
 
     init {
+        AndroidDiagnosticLog.log(
+            "config: server=${backendConfig.functionUrl.ifEmpty { "MISSING" }} publicKey=${if (backendConfig.publicKey.isBlank()) "MISSING" else "present"}",
+        )
         viewModelScope.launch {
             var previous = glasses.status.value
             glasses.status.collect { current ->

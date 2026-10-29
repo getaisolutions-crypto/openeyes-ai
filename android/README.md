@@ -117,13 +117,50 @@ android/
 
 ## 7. Developer setup
 
+### Server address and public key (required)
+
+The app calls the **same** `openeyes-ai` server function the website uses:
+`POST https://<project-ref>.supabase.co/functions/v1/openeyes-ai`. The build fills in that address and the public
+(anon) key automatically, checking in this order:
+
+1. `local.properties`: `openeyes.supabaseUrl` and `openeyes.publicKey` (optional `openeyes.functionUrl` overrides the full address).
+2. Environment variables `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`.
+3. The website's `.env` file in the repository root (present in the Bolt project download, **not** in a GitHub
+   clone, because `.env` is git-ignored).
+
+If none provides them, building or installing the APK stops with a clear message instead of producing an app that
+cannot answer. Unit tests still run. The Meta API key is never needed on the phone.
+
+### Steps
+
 1. Copy `local.properties.example` to `local.properties` (Android Studio also writes `sdk.dir` into it).
-2. Set `openeyes.functionUrl` to `https://<your-project>.supabase.co/functions/v1/openeyes-ai` and
-   `openeyes.publicKey` to the same public (anon) key the website uses.
+2. If the repository root has no `.env`, set `openeyes.supabaseUrl=https://<project-ref>.supabase.co` and
+   `openeyes.publicKey=<the website's VITE_SUPABASE_ANON_KEY>`.
 3. Keep `mwdat.applicationId=0` and `mwdat.clientToken=0` while using Developer Mode.
 4. Sync, then fix any `VERIFY` imports with Alt+Enter if they are red.
 5. Run unit tests: right-click `app/src/test` > **Run Tests**, or `./gradlew :app:testDebugUnitTest`.
 6. Build: **Build > Make Project**, or `./gradlew :app:assembleDebug`.
+
+### Rebuilding and reinstalling after a change
+
+1. **File > Sync Project with Gradle Files**.
+2. **Build > Clean Project**, then **Build > Make Project** (a stale build can keep old server settings).
+3. With the S24 on USB, press **Run**. Or **Build > Build App Bundle(s) / APK(s) > Build APK(s)** and install
+   `app/build/outputs/apk/debug/app-debug.apk`.
+
+### Diagnostics (debug builds only)
+
+In **Logcat**, filter by tag `OpenEyes`. Each request logs: the configured server address and whether a public key
+is present, capture success or failure with the JPEG size in bytes, the request address and task, HTTP status and
+time, the server's error code, and whether the answer was parsed. Keys and image data are never logged. Release
+builds log nothing.
+
+### Which "not set up" message?
+
+- "This copy of OpenEyes Glasses was built without the OpenEyes server address" - the APK had no server address or
+  public key. Fix the configuration above and rebuild. Nothing was sent.
+- "Meta AI is not set up on the OpenEyes server yet" - only when the server itself answers `not_configured`
+  (its Meta API key secret is missing). The website shows the same problem.
 
 ## 8. Exact Galaxy S24 test instructions
 
@@ -174,7 +211,6 @@ Only steps that pass on the S24 with real glasses should be described as working
 
 ## 9. Known limitations
 
-- Not compiled and not run anywhere yet; the first Android Studio sync may need import fixes.
 - Developer preview SDK; registration and camera access require Developer Mode until the app is approved in the
   Wearables Developer Center (production `APPLICATION_ID` / `CLIENT_TOKEN`).
 - No wake word, no glasses-microphone guarantee, no guaranteed glasses speaker output.

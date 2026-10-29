@@ -1,5 +1,6 @@
 package ai.openeyes.glasses.backend
 
+import ai.openeyes.glasses.core.DiagnosticLog
 import ai.openeyes.glasses.core.VisionBackend
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -12,7 +13,13 @@ import java.net.SocketTimeoutException
 import java.time.Instant
 import java.util.Base64
 
-enum class BackendErrorKind { NOT_CONFIGURED, AUTH, RATE_LIMITED, TIMEOUT, NETWORK, IMAGE_REJECTED, REJECTED, BAD_RESPONSE, SERVER }
+enum class BackendErrorKind {
+    /** This APK was built without the server address or public key; nothing was sent. */
+    APP_NOT_CONFIGURED,
+    /** The server answered that its Meta API key is missing. */
+    NOT_CONFIGURED,
+    AUTH, RATE_LIMITED, TIMEOUT, NETWORK, IMAGE_REJECTED, REJECTED, BAD_RESPONSE, SERVER,
+}
 
 class BackendException(val kind: BackendErrorKind, val retryAfterSeconds: Int? = null) : Exception(kind.name)
 
@@ -24,8 +31,8 @@ fun interface HttpTransport {
 }
 
 /**
- * @param functionUrl the existing openeyes-ai server function.
- * @param publicKey the public (anon) key the website also uses. The Meta API key stays on the server.
+ * @param functionUrl the existing openeyes-ai server function the website uses.
+ * @param publicKey the public (anon) key the website also ships. The Meta API key stays on the server.
  */
 data class BackendConfig(val functionUrl: String, val publicKey: String, val timeoutMs: Int = 60_000) {
     val isComplete: Boolean get() = functionUrl.startsWith("https://") && publicKey.isNotBlank()
@@ -36,10 +43,12 @@ class OpenEyesClient(
     private val config: BackendConfig,
     private val transport: HttpTransport,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    private val log: DiagnosticLog = DiagnosticLog.NONE,
 ) : VisionBackend {
 
     override suspend fun describe(jpeg: ByteArray, capturedAtMs: Long): String =
         send(
+            "describe",
             JSONObject()
                 .put("task", "describe")
                 .put("responseLength", "brief")
@@ -48,6 +57,7 @@ class OpenEyesClient(
 
     override suspend fun ask(question: String, jpeg: ByteArray, capturedAtMs: Long): String =
         send(
+            "chat",
             JSONObject()
                 .put("task", "chat")
                 .put("responseLength", "brief")
@@ -60,8 +70,14 @@ class OpenEyesClient(
             .put("dataUrl", "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(jpeg))
             .put("capturedAt", Instant.ofEpochMilli(capturedAtMs).toString())
 
-    private suspend fun send(payload: JSONObject): String {
-        if (!config.isComplete) throw BackendException(BackendErrorKind.NOT_CONFIGURED)
+    private suspend fun send(task: String, payload: JSONObject): String {
+        if (!config.isComplete) {
+            log.log("backend: app built without server address or public key; request not sent")
+            throw BackendException(BackendErrorKind.APP_NOT_CONFIGURED)
+        }
+        val body = payload.toString()
+        log.log("backend: POST ${config.functionUrl} task=$task bodyChars=${body.length}")
+        val started = System.currentTimeMillis()
         val response = withContext(io) {
             try {
                 transport.post(
@@ -71,16 +87,24 @@ class OpenEyesClient(
                         "apikey" to config.publicKey,
                         "Content-Type" to "application/json",
                     ),
-                    payload.toString(),
+                    body,
                     config.timeoutMs,
                 )
             } catch (e: SocketTimeoutException) {
+                log.log("backend: timed out after ${System.currentTimeMillis() - started} ms")
                 throw BackendException(BackendErrorKind.TIMEOUT)
             } catch (e: IOException) {
+                log.log("backend: network failure ${e.javaClass.simpleName}")
                 throw BackendException(BackendErrorKind.NETWORK)
             }
         }
-        return parse(response)
+        log.log("backend: HTTP ${response.status} in ${System.currentTimeMillis() - started} ms")
+        return try {
+            parse(response).also { log.log("backend: answer parsed (${it.length} chars)") }
+        } catch (e: BackendException) {
+            log.log("backend: failed kind=${e.kind} serverCode=${serverCode(response) ?: "none"}")
+            throw e
+        }
     }
 
     companion object {
@@ -101,14 +125,20 @@ class OpenEyesClient(
             "internal_error" to BackendErrorKind.SERVER,
         )
 
+        // A bare 503 without an error code comes from the hosting gateway, not from a missing Meta key.
         fun kindForStatus(status: Int): BackendErrorKind = when {
             status == 401 || status == 403 -> BackendErrorKind.AUTH
             status == 413 || status == 415 -> BackendErrorKind.IMAGE_REJECTED
             status == 429 -> BackendErrorKind.RATE_LIMITED
-            status == 503 -> BackendErrorKind.NOT_CONFIGURED
             status == 504 -> BackendErrorKind.TIMEOUT
             status in 400..499 -> BackendErrorKind.REJECTED
             else -> BackendErrorKind.SERVER
+        }
+
+        private fun serverCode(response: HttpResponse): String? = try {
+            JSONObject(response.body).optJSONObject("error")?.optString("code")?.takeIf { it.isNotEmpty() }
+        } catch (e: JSONException) {
+            null
         }
 
         fun parse(response: HttpResponse): String {
