@@ -30,8 +30,8 @@ Sources: `github.com/facebook/meta-wearables-dat-android` (README and `AGENTS.md
 | Devices | `Wearables.devices` flow | "device nearby" flag only, never "connected" |
 | Camera permission | `Wearables.checkPermissionStatus(Permission.CAMERA)`, `Wearables.RequestPermissionContract()`; granted in the Meta AI app | Allow glasses camera button |
 | Session | `Wearables.createSession(AutoDeviceSelector())`, `session.state` (IDLE, STARTING, STARTED, PAUSED, STOPPING, STOPPED), `session.errors`, fire-and-forget `start()` / `stop()`; STOPPED is terminal | Connect button; "Connected" only on STARTED |
-| Camera | `session.addCamera(StreamConfiguration(videoQuality, frameRate))` only after STARTED; `camera.stream.start()`, `stream.state`, `stream.capturePhoto()` (only while streaming) returning `PhotoData.Bitmap` or `PhotoData.HEIC`; one capture at a time | One photo per request |
-| Cleanup | `camera.stop()` invalidates the camera; `session.removeCamera()` allows a later `addCamera` | After every photo |
+| Camera | `session.addCamera(StreamConfiguration(videoQuality, frameRate))` only after STARTED; `camera.stream.start()`, `stream.state`, `stream.capturePhoto()` (only while streaming) returning `PhotoData.Bitmap` or `PhotoData.HEIC`; one capture at a time | Stream kept running; repeated `capturePhoto()` for Explore / Find |
+| Cleanup | `camera.stop()` invalidates the camera. `session.removeCamera()` does not exist in toolkit 1.0.1 and is not used; if a new `addCamera` is refused, the device session is restarted once | After 20 s idle, on mode stop, on background |
 | Pauses | Glasses off, folded, another experience or Bluetooth drop pause the session; wait for the next state | Announced, not forced |
 | Microphone / speech | `Permission.MICROPHONE`, `mwdat-speech` and Audio Streaming are **experimental** and need Developer Center approval | **Not used** |
 | Voice Invocations ("open app" by voice) | **Experimental**, configured in the Developer Center | **Not used** |

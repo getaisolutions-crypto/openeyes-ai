@@ -1,5 +1,24 @@
 # OpenEyes AI - Development Log
 
+## 2026-10-31 - Android app v0.7.0: Full Android AI experience
+
+**Implemented (Kotlin, `android/`):** home screen with Glasses / Camera / AI status and four feature buttons;
+Live Explore (`ExploreController`, repeated photos with `scene_check`, change-only narration, questions mid-explore);
+Find Objects (`FindController`, repeated `find` photos until visible or the attempt limit); Read Text
+(`ReadController`: `read`, repeat, slower, summarise / explain / translate / important via `chat`, follow-up
+questions via `ask_text` on the same photo); Ask OpenEyes (`ConversationController`, text-only `chat` with bounded
+history, typed or spoken). `CameraModeCoordinator` allows one camera feature at a time. The glasses camera stream
+is kept running between photos and stopped after 20 s idle; `session.removeCamera()` is not used. Details and the
+device checklist: `android/FEATURES.md`.
+
+**Backend:** unchanged; the same `openeyes-ai` function and anon key as the website.
+
+**Tests:** 23 new JVM unit tests in `FeatureControllersTest.kt` (with fakes). Website: typecheck, 376/376 tests,
+build passed.
+
+**Not done:** the Android app was not compiled and its unit tests were not run (no JDK / Android SDK in this
+environment). No hardware testing was performed.
+
 ## 2026-10-31 - Android app: AI backend configuration fix
 
 **Reported:** on a Galaxy S24 the glasses registered, connected, the session was active and the capture sound
