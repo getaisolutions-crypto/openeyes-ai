@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useReloadParticipant } from './useAppUpdate';
 import { AIRequestError, ProviderUnavailableError } from '../types/ai';
 import { AI_ERROR_MESSAGES } from '../services/ai/openEyesBackend';
 import { useAnnouncer } from './useAnnouncer';
@@ -60,6 +61,8 @@ export function useAIRequest<T>() {
     controllerRef.current = null;
     setState({ status: 'idle' });
   }, []);
+
+  useReloadParticipant('Meta AI request', false, reset);
 
   return { state, run, cancel, reset };
 }

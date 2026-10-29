@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useReloadParticipant } from './useAppUpdate';
 import { useServices } from '../services/ServicesContext';
 import { useSettings } from './useSettings';
 import { useAnnouncer } from './useAnnouncer';
@@ -222,6 +223,7 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
   const stop = useCallback(() => engineRef.current?.stop('user'), []);
   const interrupt = useCallback(() => engineRef.current?.interrupt(), []);
   const submit = useCallback((text: string) => engineRef.current?.submit(text), []);
+  useReloadParticipant('Voice conversation', active, stop);
 
   return {
     supported: voice.isRecognitionSupported() || Boolean(metaVoice?.isSupported()),

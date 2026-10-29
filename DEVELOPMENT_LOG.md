@@ -1,5 +1,37 @@
 # OpenEyes AI - Development Log
 
+## 2026-10-29 - App updates, cache control and version detection (v0.4.2)
+
+### Root cause investigation
+
+- No service worker, PWA manifest or Cache Storage use existed, so no offline cache held old files.
+- JS and CSS assets are content-hashed by Vite; a new build always has new file names.
+- `index.html` had no explicit caching policy, so Chrome or a CDN could reuse an old copy that points at old assets.
+  Most likely cause; live response headers not yet inspected.
+
+### Implemented
+
+- Build plugin in `vite.config.ts`: `{ version, buildId, builtAt }` compiled in as `__APP_BUILD__` and emitted as
+  `version.json` (dev server serves it too). `tsconfig.node.json` gains `resolveJsonModule`.
+- `src/services/updates/`: `buildInfo`, `updateChecker` (no-store fetch, validation, failure never means up to date),
+  `cacheReset` (this origin's Cache Storage and service workers only), `reloadGuard` (same-route cache-busting
+  reload, verification, max 2 attempts per 10 minutes), `sessionRegistry`, `updateService`.
+- `UpdateProvider` / `useAppUpdate` / `useReloadParticipant`; Live Explore, voice conversation, listening, camera and
+  AI requests register a stop action; busy sessions hold back the update notice.
+- `UpdateNotice` (banner and confirmation dialogs) in the layout; `AppUpdatesPanel` in Settings > App & updates.
+- Side menu footer now shows the embedded version instead of a hard-coded string.
+- `public/_headers`: no-cache HTML, no-store `version.json`, immutable assets. Not confirmed to be honoured by Bolt.
+- Version 0.4.2.
+
+### Checks
+
+- `npm run typecheck` passes; `npm test` 271 passing in 19 files; `npm run build` succeeds.
+
+### Not verified
+
+- Real Android Chrome, installed PWA, published response headers.
+- GitHub: no local repository is connected; the remote main branch was last seen at 0.2.0, nothing was pushed.
+
 ## 2026-10-28 - Phase 4.1: Meta Muse Voice Transcribe and hands-free fix (v0.4.1)
 
 ### Android listening bug

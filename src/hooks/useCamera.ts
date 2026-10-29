@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useReloadParticipant } from './useAppUpdate';
 import { CameraError, type CameraErrorKind, type CapturedImage } from '../types/camera';
 import { useServices } from '../services/ServicesContext';
 import { toCameraError } from '../services/camera/browserCameraProvider';
@@ -98,6 +99,8 @@ export function useCamera() {
     },
     [camera],
   );
+
+  useReloadParticipant('Camera', false, stop);
 
   return { videoRef, status, errorKind, image, start, capture, retake: start, stop, setUploadedImage, discard };
 }

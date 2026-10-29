@@ -6,6 +6,8 @@ import { App } from '../App';
 import { createDefaultServices, createUnavailableAIServices, type Services } from '../services/ServicesContext';
 import type { CameraProvider } from '../types/camera';
 import type { VoiceProvider } from '../types/voice';
+import { CURRENT_BUILD } from '../services/updates/buildInfo';
+import type { UpdateService } from '../services/updates/updateService';
 
 export function createFakeVoice(overrides: Partial<VoiceProvider> = {}): VoiceProvider {
   return {
@@ -34,6 +36,20 @@ export function createFakeCamera(overrides: Partial<CameraProvider> = {}): Camer
   };
 }
 
+/** Never touches the network, caches or the real page address. Defaults to "up to date". */
+export function createFakeUpdates(overrides: Partial<UpdateService> = {}): UpdateService {
+  return {
+    current: CURRENT_BUILD,
+    initialOutcome: { kind: 'none' },
+    storage: null,
+    check: vi.fn(async () => ({ status: 'up-to-date' as const, latest: CURRENT_BUILD })),
+    clearCaches: vi.fn(async () => ({ cacheStorageSupported: true, deletedCaches: [], serviceWorkersRemoved: 0, problems: [] })),
+    stopSpeech: vi.fn(),
+    reload: vi.fn(),
+    ...overrides,
+  };
+}
+
 /** AI providers default to "unavailable" so no test ever reaches the real server. Override them to inject fakes. */
 export function createTestServices(overrides: Partial<Services> = {}): Services {
   return {
@@ -42,6 +58,7 @@ export function createTestServices(overrides: Partial<Services> = {}): Services 
     voice: createFakeVoice(),
     metaVoice: null,
     camera: createFakeCamera(),
+    updates: createFakeUpdates(),
     ...overrides,
   };
 }

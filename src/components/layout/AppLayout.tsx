@@ -4,6 +4,8 @@ import { Loader2 } from 'lucide-react';
 import { NAV_ITEMS } from './navigation';
 import { LogoMark } from './LogoMark';
 import { MobileNav } from './MobileNav';
+import { UpdateNotice } from '../UpdateNotice';
+import { CURRENT_BUILD } from '../../services/updates/buildInfo';
 
 function PageLoading() {
   return (
@@ -52,7 +54,7 @@ export function AppLayout() {
               ))}
             </ul>
           </nav>
-          <p className="mt-auto px-3 text-sm text-muted">Version 0.4.1, Phase 4.1 Meta Voice conversation</p>
+          <p className="mt-auto px-3 text-sm text-muted">Version {CURRENT_BUILD.version}</p>
         </div>
       </aside>
 
@@ -65,6 +67,8 @@ export function AppLayout() {
             </Link>
           </div>
         </header>
+
+        <UpdateNotice />
 
         <main id="main" tabIndex={-1} className="mx-auto w-full max-w-2xl flex-1 px-4 pb-32 pt-6 focus:outline-none lg:pb-12 lg:pt-10">
           <Suspense fallback={<PageLoading />}>

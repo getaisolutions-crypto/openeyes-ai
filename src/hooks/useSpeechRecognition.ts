@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useReloadParticipant } from './useAppUpdate';
 import type { ListeningSession, SpeechErrorKind } from '../types/voice';
 import { useServices } from '../services/ServicesContext';
 
@@ -54,6 +55,7 @@ export function useSpeechRecognition({ onFinal }: Options) {
   }, [supported, voice]);
 
   const stop = useCallback(() => session.current?.stop(), []);
+  useReloadParticipant('Listening', listening, stop);
 
   useEffect(() => () => session.current?.abort(), []);
 

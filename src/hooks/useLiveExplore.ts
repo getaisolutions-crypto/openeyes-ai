@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useReloadParticipant } from './useAppUpdate';
 import { useServices } from '../services/ServicesContext';
 import { useSettings } from './useSettings';
 import { useAnnouncer } from './useAnnouncer';
@@ -270,6 +271,7 @@ export function useLiveExplore() {
   );
 
   const stop = useCallback(() => controllerRef.current?.stop('user'), []);
+  useReloadParticipant('Live Explore', running, stop);
 
   const pause = useCallback(() => {
     const c = controllerRef.current;

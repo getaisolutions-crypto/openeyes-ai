@@ -2,6 +2,7 @@ import { lazy } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { AnnouncerProvider } from './hooks/useAnnouncer';
+import { UpdateProvider } from './hooks/useAppUpdate';
 import { SettingsProvider } from './hooks/useSettings';
 import { ServicesProvider, type Services } from './services/ServicesContext';
 import HomePage from './pages/HomePage';
@@ -21,20 +22,22 @@ export function App({ services }: { services: Services }) {
     <ServicesProvider services={services}>
       <SettingsProvider>
         <AnnouncerProvider>
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route index element={<HomePage />} />
-              <Route path="assistant" element={<AssistantPage />} />
-              <Route path="explore" element={<ExplorePage />} />
-              <Route path="find" element={<FindPage />} />
-              <Route path="read" element={<ReadPage />} />
-              <Route path="memory" element={<MemoryPage />} />
-              <Route path="devices" element={<DevicesPage />} />
-              <Route path="trusted-circle" element={<TrustedCirclePage />} />
-              <Route path="settings" element={<SettingsPage />} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Route>
-          </Routes>
+          <UpdateProvider service={services.updates}>
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route index element={<HomePage />} />
+                <Route path="assistant" element={<AssistantPage />} />
+                <Route path="explore" element={<ExplorePage />} />
+                <Route path="find" element={<FindPage />} />
+                <Route path="read" element={<ReadPage />} />
+                <Route path="memory" element={<MemoryPage />} />
+                <Route path="devices" element={<DevicesPage />} />
+                <Route path="trusted-circle" element={<TrustedCirclePage />} />
+                <Route path="settings" element={<SettingsPage />} />
+                <Route path="*" element={<NotFoundPage />} />
+              </Route>
+            </Routes>
+          </UpdateProvider>
         </AnnouncerProvider>
       </SettingsProvider>
     </ServicesProvider>

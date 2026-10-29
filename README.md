@@ -6,7 +6,11 @@ OpenEyes AI is a voice-first, accessibility-first personal assistant designed to
 understand their surroundings, find objects, read text, remember important information and accomplish everyday tasks
 more independently. The long-term target is Android smartphones and compatible Meta AI glasses.
 
-> Status: **Phase 4.1 (v0.4.1): Meta Muse Voice Transcribe connected through a secure OpenEyes server relay and
+> Status: **v0.4.2: app updates and cache control.** Settings now has **App & updates** (current and latest version,
+> Check for updates, Clear cache & reload) and the app tells you when a newer build is published. Not yet verified on a
+> real Android phone. See [App updates and caching (v0.4.2)](#app-updates-and-caching-v042).
+>
+> Phase 4.1 (v0.4.1): Meta Muse Voice Transcribe connected through a secure OpenEyes server relay and
 > verified with real Meta API requests; the Android "tap the microphone after every answer" bug fixed in code and covered
 > by automated tests. Hands-free conversation has not yet been verified on a real Android phone.** See
 > [Phase 4.1](#phase-41-meta-voice-transcribe-and-hands-free-fix).
@@ -420,6 +424,75 @@ conversation. The active recognizer is shown under the conversation status.
 5. TalkBack on and off, phone speaker and headphones.
 6. Microphone indicator after stop, leaving the app and locking the screen.
 
+## App updates and caching (v0.4.2)
+
+### Why older versions stayed visible
+
+OpenEyes has no service worker, no PWA manifest and never used Cache Storage, so no offline cache was holding old
+files. JavaScript and CSS files carry a content hash in their names (`/assets/index-<hash>.js`), so a new build always
+uses new file names. The stale copy is `index.html` itself: without an explicit `Cache-Control` header, Chrome and
+CDNs may reuse a cached copy heuristically, and that old page keeps pointing at the old hashed files. The live
+response headers of the published site have not been inspected yet, so this is the most likely cause, not a confirmed one.
+
+### Version detection
+
+- `vite.config.ts` contains a small plugin (`openeyes-build-info`). Each build creates `{ version, buildId, builtAt }`:
+  the version comes from `package.json` at build time, the build id is a timestamp plus random suffix, unique per build.
+- The same object is compiled into the app as `__APP_BUILD__` (read through `src/services/updates/buildInfo.ts`) and
+  written to `dist/version.json`. Both always come from the same build, so nothing is hard-coded or read from
+  `package.json` at runtime. The dev server also answers `/version.json`.
+- A check requests `/version.json?t=<now>` with `cache: 'no-store'` and a 10 second timeout, validates the response,
+  and compares build ids (`src/services/updates/updateChecker.ts`). Offline, timeout, HTTP error, network error and an
+  unreadable response (for example the HTML fallback page when the file is missing) all report **Could not check**;
+  a failed check never reports "Up to date".
+- Automatic checks: at start-up, when the app returns to the foreground, when the connection comes back, and every
+  30 minutes while visible; never more than once per 5 minutes automatically.
+
+### Update notice and safe update
+
+- When a new build is found, a notice says "A new version of OpenEyes AI is available." with **Update now** and
+  **Later**, and the message is spoken through the screen reader live region.
+- The notice is held back while Live Explore, a voice conversation or listening is running, and nothing ever reloads
+  without confirmation.
+- Update now explains the reload in a confirmation dialog, then stops registered features (Live Explore, voice
+  conversation including the Meta Voice relay connection, listening, camera, pending Meta AI requests), cancels
+  speech, clears cached app files and reloads the same route with a one-time `_oe_refresh` query so the browser and CDN
+  must fetch a fresh page. The query is removed from the address straight after start-up.
+- After the reload, a sessionStorage record confirms whether the build id changed. If not, a clear error appears with
+  Try again. After two failed attempts within 10 minutes, further reloads are refused and manual steps are shown, so
+  reload loops cannot happen. Start-up never reloads on its own.
+
+### Clear cache & reload
+
+Confirmation text: "Clear cached app files and reload OpenEyes AI? Your memories, trusted contacts, and personal
+settings will be kept." It deletes this site's Cache Storage entries (the browser only exposes this site's caches)
+and unregisters any service worker registered on this origin (OpenEyes ships none, so any found is a leftover), then
+reloads as above. localStorage (memories, contacts, settings, conversation, consents) and IndexedDB are never touched.
+JavaScript cannot clear Chrome's HTTP cache, so this works by forcing a fresh page request rather than wiping it.
+
+### Hosting cache configuration
+
+`public/_headers` (copied to `dist/_headers`) uses the same Netlify-style convention as the `_redirects` file Bolt
+hosting already generates: `index.html` and app routes `no-cache`, `version.json` `no-store`, `/assets/*`
+`public, max-age=31536000, immutable`. Bolt's documentation does not say whether `_headers` is honoured. **Unverified:**
+after publishing, inspect the response headers of the site and `/version.json`. The update check works either way,
+because it bypasses the cache with `no-store` and a unique query.
+
+### Manual refresh (also shown in Settings)
+
+- Android Chrome: Chrome menu (three dots), Reload. If still old, close Chrome from recent apps and reopen.
+- Installed app: close it from recent apps and reopen.
+- Desktop Chrome: Ctrl+Shift+R (Cmd+Shift+R on Mac).
+- Last resort: Chrome Settings, Privacy and security, Delete browsing data, **Cached images and files only**. Choosing
+  cookies and site data deletes memories, contacts and settings.
+
+### Known limitations
+
+- Not yet verified on a real Android phone or installed PWA.
+- Whether Bolt hosting applies `_headers` is unknown.
+- A CDN may still serve an old `index.html` for its own cache lifetime; the version check itself is not affected.
+- Without sessionStorage the reload still works but cannot be verified afterwards.
+
 ## Meta AI integration (Phase 2)
 
 ### Verified against official Meta documentation
@@ -569,6 +642,13 @@ Manual testing with TalkBack and VoiceOver on physical devices is still required
 - `.env` is git-ignored. Do not commit secrets or personal data.
 
 ## Test results
+
+v0.4.2: `npm run typecheck` passes, `npm test` **271 tests passing in 19 files** (238 from Phase 4.1, unchanged, plus
+33 new in `appUpdates.test.tsx`), `npm run build` succeeds and emits `dist/version.json` and `dist/_headers`. New
+tests cover version display, manifest request without HTTP cache, build id comparison, update detection, every check
+failure, cache deletion, personal data preservation, service worker handling, browsers without Cache Storage or
+service workers, session cleanup before reload, confirmation and cancel, same-route reload, verification after reload
+and reload-loop prevention.
 
 Phase 4.1 (v0.4.1): `npm run typecheck` passes, `npm test` **238 tests passing in 18 files** (182 from Phase 4,
 unchanged, plus 56 new), `npm run build` succeeds. New tests cover: Android-style speech lifecycle (lost `onend`, lost

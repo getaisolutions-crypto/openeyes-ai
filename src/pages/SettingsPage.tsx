@@ -13,6 +13,7 @@ import { MODE_LABELS } from '../hooks/useLiveExplore';
 import { VoiceSelect } from '../components/VoiceSelect';
 import { META_MODELS } from '../services/ai/metaModels';
 import { MetaConnectionCheck } from '../components/MetaConnectionCheck';
+import { AppUpdatesPanel } from '../components/AppUpdatesPanel';
 import { clearAllAppData } from '../utils/storage';
 import type { AssistanceMode, ExploreMode, ProactiveFrequency, SpeechRecognitionChoice, TextSize, Theme } from '../types/settings';
 import type { ResponseLength } from '../types/ai';
@@ -343,6 +344,10 @@ export default function SettingsPage() {
           Muse Spark answers only when the OpenEyes server has a Meta API key. The other models are not connected yet.
         </p>
         <MetaConnectionCheck />
+      </Section>
+
+      <Section title="App & updates">
+        <AppUpdatesPanel />
       </Section>
 
       <button type="button" className="btn-secondary mt-6 w-full" onClick={() => setConfirmReset(true)}>

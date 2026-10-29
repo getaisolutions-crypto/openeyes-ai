@@ -18,6 +18,7 @@ import { createPhoneCameraDevice, createPhoneMicrophoneDevice } from './devices/
 import { createLocalContactsProvider } from './memory/localContactsProvider';
 import { createLocalMemoryProvider } from './memory/localMemoryProvider';
 import { createMetaVoiceRecognizer, getMetaVoiceConfigFromEnv } from './voice/metaVoiceRecognizer';
+import { createBrowserUpdateService, type UpdateService } from './updates/updateService';
 import { createWebSpeechVoiceProvider } from './voice/webSpeechVoiceProvider';
 
 export interface Services {
@@ -37,6 +38,7 @@ export interface Services {
     phoneMicrophone: DeviceProvider;
     metaGlasses: DeviceProvider;
   };
+  updates: UpdateService;
 }
 
 export function createUnavailableAIServices(): Pick<Services, 'ai' | 'vision' | 'objectDetection'> {
@@ -71,6 +73,7 @@ export function createDefaultServices(): Services {
       phoneMicrophone: createPhoneMicrophoneDevice(),
       metaGlasses: createMetaGlassesDevice(),
     },
+    updates: createBrowserUpdateService(),
   };
 }
 
