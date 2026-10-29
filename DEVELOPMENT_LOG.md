@@ -1,5 +1,29 @@
 # OpenEyes AI - Development Log
 
+## 2026-10-29 - Voice system repair (v0.5.1)
+
+### Changed
+
+- `voiceConversationEngine.ts`: silence keeps listening (removed `maxSilentRounds`); rapid-end detection
+  (`maxRapidEnds` 8, `rapidEndMs` 1000); error backoff up to 4 s, park after 4 failures; permission re-check via
+  `checkPermission`; speech end deadline (`speechDeadlineMs`); deferred/dropped automatic descriptions; diagnostic
+  events (`onDiagnostic`). Talk resets parked/unreliable state.
+- `voiceDiagnostics.ts` (new), `VoiceDiagnosticsPanel.tsx` (new), Settings section "Voice diagnostics".
+- `useVoiceConversation.ts`: permission query, diagnostics recording, clearer paused notice.
+- `useLiveExplore.ts`: `runUserTask` restores the conversation flag instead of clearing it; start message for
+  conversation mode.
+- `metaModels.ts`: Muse Voice Transcribe marked integrated. Settings privacy and voice text corrected.
+- Edge functions unchanged.
+
+### Checks
+
+- `npm run typecheck` passes; `npm test` 376 passing in 26 files; `npm run build` succeeds. All mocked; no device testing.
+
+### Not verified
+
+- Real Android Chrome behaviour of automatic restarts, TalkBack, Meta Voice under network loss.
+- GitHub sync: the project directory is not a git repository here; push from Bolt's GitHub integration.
+
 ## 2026-10-29 - Phases 5, 6 and 7 (v0.5.0)
 
 ### Implemented

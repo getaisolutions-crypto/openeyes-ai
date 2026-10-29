@@ -2,12 +2,26 @@ import type { ListeningHandlers, ListeningSession, SpeechErrorKind } from '../..
 import { canTransition, type ConversationState } from './conversationStateMachine';
 import { isLikelyEcho, matchWakePhrase } from './utterances';
 
+export type MicrophonePermission = 'granted' | 'denied' | 'prompt' | 'unknown';
+
 export interface RecognizerPort {
   isSupported(): boolean;
   /** Asks for microphone permission. Rejects with a SpeechErrorKind. */
   requestMicrophone(): Promise<void>;
   startListening(handlers: ListeningHandlers): ListeningSession;
+  /** Re-checks the permission when recognition reports it as blocked; Android can report that for other reasons. */
+  checkPermission?(): Promise<MicrophonePermission>;
 }
+
+/** Privacy-safe lifecycle events: states, error categories and timings only, never words or audio. */
+export type VoiceDiagnosticEvent =
+  | { kind: 'state'; state: ConversationState }
+  | { kind: 'recognition-error'; error: SpeechErrorKind }
+  | { kind: 'restart'; reason: 'silence' | 'rapid-end' | 'error'; attempt: number }
+  | { kind: 'resumed'; afterMs: number }
+  | { kind: 'speech-error'; error: 'no-end' }
+  | { kind: 'auto-description'; action: 'deferred' | 'dropped' | 'spoken' }
+  | { kind: 'paused-hands-free'; reason: ConversationNotice };
 
 export interface SpeechOutputPort {
   speak(text: string, callbacks: { onStart: () => void; onEnd: () => void }): void;
@@ -62,6 +76,7 @@ export interface ConversationDeps {
   onNotice(kind: ConversationNotice, error: SpeechErrorKind | null): string;
   onMetrics(metrics: TurnMetrics): void;
   onEnd(reason: ConversationEndReason): void;
+  onDiagnostic?(event: VoiceDiagnosticEvent): void;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -78,17 +93,29 @@ export interface ConversationConfig {
 }
 
 export const CONVERSATION_LIMITS = {
-  /** Silent listening rounds before switching to tap-to-talk; Android plays a tone every round. */
-  maxSilentRounds: 3,
-  /** Recognition failures in a row before hands-free listening is considered unreliable. */
-  maxRecognitionFailures: 2,
+  /** Recognition errors in a row (with growing pauses) before hands-free pauses until the user taps Talk. */
+  maxRecognitionFailures: 4,
+  /** A round that ends this fast without hearing anything is a rapid end (Android does this right after speech output). */
+  rapidEndMs: 1000,
+  /** Rapid ends in a row before hands-free pauses; normal silence never pauses it. */
+  maxRapidEnds: 8,
+  maxRestartBackoffMs: 4000,
   restartDelayMs: 300,
   /** Pause after speech so the tail of the audio is not picked up by the microphone. */
   afterSpeechDelayMs: 400,
   /** Follow-up window after a reply in which the wake phrase is not needed. */
   wakeWindowMs: 8000,
   maxBargeInRestarts: 3,
+  /** Added to a generous estimate of the speaking time before a reply whose end event never came counts as finished. */
+  speechEndSlackMs: 10_000,
+  /** Automatic descriptions held back while the microphone is open are dropped after this long. */
+  autoDescriptionMaxAgeMs: 20_000,
 } as const;
+
+/** Upper bound for speaking time: about 7.5 characters per second, the slowest speech rate. */
+export function speechDeadlineMs(text: string) {
+  return (text.length / 7.5) * 1000 + CONVERSATION_LIMITS.speechEndSlackMs;
+}
 
 export function createVoiceConversationEngine(deps: ConversationDeps, initialConfig: ConversationConfig) {
   const now = deps.now ?? (() => Date.now());
@@ -101,7 +128,7 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
   let session: ListeningSession | null = null;
   let listenId = 0;
   let lastError: SpeechErrorKind | null = null;
-  let silentRounds = 0;
+  let rapidEnds = 0;
   let failures = 0;
   let unreliable = false;
   /** Stay in tap-to-talk after a notice, until the user taps Talk again. */
@@ -109,6 +136,8 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
   let listenTimer: unknown = null;
   let sessionTimer: unknown = null;
   let speechStartedAt: number | null = null;
+  let speechTimer: unknown = null;
+  let queuedAuto: { text: string; at: number } | null = null;
 
   let turnId = 0;
   let turnAbort: AbortController | null = null;
@@ -123,6 +152,7 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
   let metrics: TurnTracking | null = null;
   let listenStartedAt = 0;
 
+  const diag = (event: VoiceDiagnosticEvent) => deps.onDiagnostic?.(event);
   const emitState = () => deps.onState(state, { bargeInListening: Boolean(bargeSession) });
 
   function transition(to: ConversationState): boolean {
@@ -130,6 +160,7 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
     if (!canTransition(state, to)) return false;
     state = to;
     emitState();
+    diag({ kind: 'state', state: to });
     return true;
   }
 
@@ -165,7 +196,13 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
     deps.cancelPending();
   }
 
+  function clearSpeechTimer() {
+    if (speechTimer !== null) clearTimer(speechTimer);
+    speechTimer = null;
+  }
+
   function silenceSpeech() {
+    clearSpeechTimer();
     utteranceId++;
     stopBargeIn();
     deps.output.stop();
@@ -175,6 +212,7 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
     stopRecognition();
     if (!transition('waiting')) return;
     parked = true;
+    diag({ kind: 'paused-hands-free', reason: notice });
     const message = deps.onNotice(notice, error);
     if (message) speak(message, false);
   }
@@ -197,27 +235,66 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
     }
   }
 
-  function afterListenEnd() {
-    if (!active || (state !== 'listening' && state !== 'user-speaking')) return;
-    const error = lastError;
-    lastError = null;
-    if (error === 'permission-denied') {
-      stop('permission-denied');
-      return;
-    }
-    if (error === null || error === 'no-speech') {
-      silentRounds++;
-      if (silentRounds >= CONVERSATION_LIMITS.maxSilentRounds) toWaiting('stopped-listening', null);
-      else scheduleListen(CONVERSATION_LIMITS.restartDelayMs);
-      return;
-    }
+  const isListening = () => state === 'listening' || state === 'user-speaking';
+
+  function backoff(attempt: number) {
+    return Math.min(CONVERSATION_LIMITS.restartDelayMs * 2 ** attempt, CONVERSATION_LIMITS.maxRestartBackoffMs);
+  }
+
+  /** Speaks a held-back automatic description between listening rounds. */
+  function speakQueuedAuto(): boolean {
+    const queued = queuedAuto;
+    queuedAuto = null;
+    if (!queued || now() - queued.at > CONVERSATION_LIMITS.autoDescriptionMaxAgeMs) return false;
+    diag({ kind: 'auto-description', action: 'spoken' });
+    speak(queued.text, false);
+    return true;
+  }
+
+  function recognitionFailed(error: SpeechErrorKind) {
     failures++;
     if (failures >= CONVERSATION_LIMITS.maxRecognitionFailures) {
       unreliable = true;
       toWaiting('recognition-unreliable', error);
-    } else {
-      scheduleListen(CONVERSATION_LIMITS.restartDelayMs * 2);
+      return;
     }
+    diag({ kind: 'restart', reason: 'error', attempt: failures });
+    scheduleListen(backoff(failures));
+  }
+
+  async function confirmPermissionDenied() {
+    const check = deps.recognizer.checkPermission;
+    const id = listenId;
+    const permission = check ? await check().catch(() => 'unknown' as const) : 'denied';
+    if (!active || id !== listenId || !isListening()) return;
+    if (permission === 'denied') stop('permission-denied');
+    else recognitionFailed('permission-denied');
+  }
+
+  function afterListenEnd() {
+    if (!active || !isListening()) return;
+    const error = lastError;
+    lastError = null;
+    if (error) diag({ kind: 'recognition-error', error });
+    if (error === 'permission-denied') {
+      void confirmPermissionDenied();
+      return;
+    }
+    if (error === null || error === 'no-speech') {
+      // Silence is normal: keep listening. Only rounds that end at once, again and again, pause hands-free.
+      const rapid = now() - listenStartedAt < CONVERSATION_LIMITS.rapidEndMs;
+      rapidEnds = rapid ? rapidEnds + 1 : 0;
+      if (rapidEnds >= CONVERSATION_LIMITS.maxRapidEnds) {
+        unreliable = true;
+        toWaiting('recognition-unreliable', null);
+        return;
+      }
+      if (speechStartedAt === null && speakQueuedAuto()) return;
+      diag({ kind: 'restart', reason: rapid ? 'rapid-end' : 'silence', attempt: rapidEnds });
+      scheduleListen(rapid ? backoff(rapidEnds) : CONVERSATION_LIMITS.restartDelayMs);
+      return;
+    }
+    recognitionFailed(error);
   }
 
   function listen() {
@@ -230,6 +307,7 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
     if (metrics && metrics.endedAt !== null && metrics.resumeListeningMs === null) {
       metrics.resumeListeningMs = listenStartedAt - metrics.endedAt;
       sendMetrics();
+      diag({ kind: 'resumed', afterMs: metrics.resumeListeningMs });
     }
     lastError = null;
     session = deps.recognizer.startListening({
@@ -258,8 +336,9 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
   function heard(raw: string) {
     const text = raw.trim();
     if (!text) return;
-    silentRounds = 0;
+    rapidEnds = 0;
     failures = 0;
+    queuedAuto = null;
     const startedAt = speechStartedAt;
     deps.onInterim('');
     let request = text;
@@ -354,7 +433,33 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
     }
     transition('assistant-speaking');
     startBargeIn(uid);
+    let finished = false;
+    const onEnd = () => {
+      if (uid !== utteranceId || finished) return;
+      finished = true;
+      clearSpeechTimer();
+      stopBargeIn();
+      if (!active) return;
+      if (metrics && metrics.replyUid === uid && metrics.endedAt === null) {
+        const t = now();
+        metrics.endedAt = t;
+        if (metrics.playingAt !== null) metrics.playbackMs = t - metrics.playingAt;
+        sendMetrics();
+      }
+      if (pending) transition('processing');
+      else resumeAfterTurn(CONVERSATION_LIMITS.afterSpeechDelayMs);
+    };
+    clearSpeechTimer();
+    // The end event can be lost on Android or audio may never start; never leave the microphone off for good.
+    speechTimer = setTimer(() => {
+      speechTimer = null;
+      if (uid !== utteranceId || finished) return;
+      diag({ kind: 'speech-error', error: 'no-end' });
+      deps.output.stop();
+      onEnd();
+    }, speechDeadlineMs(text));
     deps.output.speak(text, {
+      onEnd,
       onStart: () => {
         if (uid !== utteranceId || !metrics || metrics.replyUid !== uid || metrics.speakAt === null || metrics.playingAt !== null) return;
         const t = now();
@@ -362,21 +467,6 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
         metrics.playbackStartMs = t - metrics.speakAt;
         metrics.endToEndMs = t - metrics.heardAt;
         sendMetrics();
-      },
-      onEnd: () => {
-        if (uid !== utteranceId) return;
-        stopBargeIn();
-        if (!active) return;
-        if (metrics && metrics.replyUid === uid && metrics.endedAt === null) {
-          const t = now();
-          metrics.endedAt = t;
-          if (metrics.playingAt !== null) metrics.playbackMs = t - metrics.playingAt;
-          sendMetrics();
-        }
-        if (pending) transition('processing');
-        else {
-          resumeAfterTurn(CONVERSATION_LIMITS.afterSpeechDelayMs);
-        }
       },
     });
   }
@@ -393,6 +483,7 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
     active = false;
     if (sessionTimer !== null) clearTimer(sessionTimer);
     sessionTimer = null;
+    queuedAuto = null;
     stopRecognition();
     silenceSpeech();
     cancelTurn();
@@ -422,8 +513,9 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
       active = true;
       unreliable = false;
       parked = false;
-      silentRounds = 0;
+      rapidEnds = 0;
       failures = 0;
+      queuedAuto = null;
       try {
         await deps.recognizer.requestMicrophone();
       } catch (error) {
@@ -449,11 +541,24 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
     /**
      * Speaks on behalf of the app while the session is running, so only one voice controls the speaker.
      * Returns false when the session is not running and the caller should speak normally.
-     * Automatic descriptions are dropped unless the user is idle.
+     * Automatic descriptions never cut off an open microphone: while listening they wait for a quiet moment
+     * between listening rounds, and they are dropped while the user speaks or a request is running.
      */
     say(text: string, kind: 'reply' | 'auto' | 'status'): boolean {
       if (!active) return false;
-      if (kind === 'auto' && state !== 'listening' && state !== 'waiting') return true;
+      if (kind === 'auto') {
+        if (state === 'waiting') {
+          diag({ kind: 'auto-description', action: 'spoken' });
+          speak(text, false);
+        } else if (state === 'listening') {
+          queuedAuto = { text, at: now() };
+          diag({ kind: 'auto-description', action: 'deferred' });
+        } else {
+          diag({ kind: 'auto-description', action: 'dropped' });
+        }
+        return true;
+      }
+      queuedAuto = null;
       speak(text, kind === 'reply');
       return true;
     },
@@ -474,8 +579,12 @@ export function createVoiceConversationEngine(deps: ConversationDeps, initialCon
 
     /** Talk button: stops speech, cancels the pending answer and listens right away. */
     interrupt() {
-      if (!active || state === 'listening' || state === 'user-speaking') return;
+      if (!active || isListening()) return;
+      // Tapping Talk turns hands-free back on after it paused.
       parked = false;
+      unreliable = false;
+      failures = 0;
+      rapidEnds = 0;
       silenceSpeech();
       if (pending) cancelTurn();
       transition('interrupted');

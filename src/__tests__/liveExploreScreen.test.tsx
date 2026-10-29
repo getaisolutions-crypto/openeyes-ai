@@ -163,6 +163,23 @@ describe('Live Explore', () => {
     expect(await live().findByText(/keys appears to be in the photo/)).toBeInTheDocument();
   });
 
+  it('keeps the same camera session across several questions', async () => {
+    const user = userEvent.setup();
+    let i = 0;
+    const { services, camera, stream } = setup(async () => ({ task: 'chat', text: `Answer ${++i}.` }));
+    renderApp('/explore', services);
+    await start(user);
+    await live().findByText('Camera on, waiting for your question');
+    for (const q of ['What is in front of me?', "What's on my left?", 'What is on the table?']) {
+      await type(user, q);
+      expect(await live().findByText(`Answer ${i}.`)).toBeInTheDocument();
+    }
+    expect(i).toBe(3);
+    expect(camera.start).toHaveBeenCalledTimes(1);
+    expect(camera.stop).not.toHaveBeenCalledWith(stream);
+    expect(live().getByText('Camera on, waiting for your question')).toBeInTheDocument();
+  }, 20_000);
+
   it('pauses, resumes and stops by voice, and turns the camera off on stop', async () => {
     const user = userEvent.setup();
     const { services, camera, stream, hear } = setup(async () => ({ text: 'unused' }));

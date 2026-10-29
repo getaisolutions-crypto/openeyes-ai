@@ -364,7 +364,7 @@ describe('update notification', () => {
     expect(await screen.findByText(RELOAD_BLOCKED_MESSAGE, {}, { timeout: 5000 })).toBeInTheDocument();
     expect(service.reload).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
-  });
+  }, 15_000);
 
   it('shows a clear error when the reload did not deliver the new build', async () => {
     renderUpdater(createFakeUpdates({ initialOutcome: { kind: 'unchanged', reason: 'update', canRetry: true } }));

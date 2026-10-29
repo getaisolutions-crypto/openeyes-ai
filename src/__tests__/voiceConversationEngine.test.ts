@@ -146,17 +146,31 @@ describe('voice conversation engine', () => {
     expect(t.engine.state).toBe('listening');
   });
 
-  it('switches to tap-to-talk after several silent rounds', async () => {
-    const t = await started();
-    for (let i = 0; i < CONVERSATION_LIMITS.maxSilentRounds; i++) {
+  it('keeps listening through long silence instead of ending hands-free', async () => {
+    const t = await started({ maxDurationMs: 3_600_000 });
+    for (let i = 0; i < 30; i++) {
+      t.advance(2000);
       t.lastListen().onEnd();
-      t.advance(CONVERSATION_LIMITS.restartDelayMs);
+      t.advance(CONVERSATION_LIMITS.maxRestartBackoffMs);
     }
-    expect(t.deps.onNotice).toHaveBeenCalledWith('stopped-listening', null);
-    expect(t.spoken[t.spoken.length - 1].text).toBe('notice stopped-listening');
+    expect(t.deps.onNotice).not.toHaveBeenCalled();
+    expect(t.engine.state).toBe('listening');
+    expect(t.engine.handsFreeAvailable).toBe(true);
+    expect(t.listens.length).toBe(31);
+  });
+
+  it('pauses hands-free only when the recognizer keeps ending instantly', async () => {
+    const t = await started();
+    for (let i = 1; i <= CONVERSATION_LIMITS.maxRapidEnds; i++) {
+      t.lastListen().onEnd();
+      t.advance(Math.min(CONVERSATION_LIMITS.restartDelayMs * 2 ** i, CONVERSATION_LIMITS.maxRestartBackoffMs));
+    }
+    expect(t.deps.onNotice).toHaveBeenCalledWith('recognition-unreliable', null);
+    expect(t.engine.handsFreeAvailable).toBe(false);
     t.finishSpeech();
-    t.advance(1000);
-    expect(t.engine.state).toBe('waiting');
+    t.engine.interrupt();
+    expect(t.engine.state).toBe('listening');
+    expect(t.engine.handsFreeAvailable).toBe(true);
   });
 
   it('falls back to tap-to-talk when recognition keeps failing', async () => {
@@ -164,7 +178,7 @@ describe('voice conversation engine', () => {
     for (let i = 0; i < CONVERSATION_LIMITS.maxRecognitionFailures; i++) {
       t.lastListen().onError('network');
       t.lastListen().onEnd();
-      t.advance(CONVERSATION_LIMITS.restartDelayMs * 2);
+      t.advance(CONVERSATION_LIMITS.maxRestartBackoffMs);
     }
     expect(t.deps.onNotice).toHaveBeenCalledWith('recognition-unreliable', 'network');
     expect(t.engine.handsFreeAvailable).toBe(false);
@@ -174,8 +188,144 @@ describe('voice conversation engine', () => {
     const t = await started();
     t.lastListen().onError('permission-denied');
     t.lastListen().onEnd();
+    await t.flush();
     expect(t.deps.onEnd).toHaveBeenCalledWith('permission-denied');
     expect(t.engine.active).toBe(false);
+  });
+
+  it('keeps going when a permission error is spurious and the browser still grants the mic', async () => {
+    const t = setup();
+    (t.deps.recognizer as Record<string, unknown>).checkPermission = vi.fn(async () => 'granted');
+    await t.engine.start('Welcome');
+    t.finishSpeech();
+    t.advance(CONVERSATION_LIMITS.afterSpeechDelayMs);
+    t.lastListen().onError('permission-denied');
+    t.lastListen().onEnd();
+    await t.flush();
+    t.advance(CONVERSATION_LIMITS.maxRestartBackoffMs);
+    expect(t.deps.onEnd).not.toHaveBeenCalled();
+    expect(t.engine.state).toBe('listening');
+  });
+
+  it('runs three hands-free questions with no taps, then stops for good', async () => {
+    const t = await started();
+    t.deps.handleTurn.mockImplementation(async (text: string) => {
+      t.engine.say(`Answer to ${text}`, 'reply');
+    });
+    for (const q of ['one', 'two', 'three']) {
+      t.lastListen().onFinal(q);
+      await t.flush();
+      expect(t.engine.state).toBe('assistant-speaking');
+      t.finishSpeech();
+      t.advance(CONVERSATION_LIMITS.afterSpeechDelayMs);
+      expect(t.engine.state).toBe('listening');
+    }
+    expect(t.deps.handleTurn).toHaveBeenCalledTimes(3);
+    const listensBefore = t.listens.length;
+    t.engine.stop('user');
+    t.advance(60_000);
+    expect(t.listens.length).toBe(listensBefore);
+    expect(t.engine.active).toBe(false);
+    expect(t.aborts[t.aborts.length - 1]).toHaveBeenCalled();
+  });
+
+  it('resumes listening when speech never reports its end', async () => {
+    const t = await started({ maxDurationMs: 3_600_000 });
+    t.deps.handleTurn.mockImplementationOnce(async () => {
+      t.engine.say('A long answer. '.repeat(40), 'reply');
+    });
+    t.lastListen().onFinal('Describe everything');
+    await t.flush();
+    t.spoken[t.spoken.length - 1].onStart();
+    const before = t.listens.length;
+    t.advance(CONVERSATION_LIMITS.speechEndSlackMs + 120_000);
+    expect(t.deps.output.stop).toHaveBeenCalled();
+    expect(t.listens.length).toBe(before + 1);
+    expect(t.engine.state).toBe('listening');
+  });
+
+  it('ignores a late speech end after the deadline already resumed listening', async () => {
+    const t = await started();
+    t.deps.handleTurn.mockImplementationOnce(async () => t.engine.say('Short.', 'reply'));
+    t.lastListen().onFinal('Hi');
+    await t.flush();
+    const s = t.spoken[t.spoken.length - 1];
+    s.onStart();
+    t.advance(CONVERSATION_LIMITS.speechEndSlackMs + 5000);
+    const count = t.listens.length;
+    s.onEnd();
+    t.advance(5000);
+    expect(t.listens.length).toBe(count);
+  });
+
+  it('stop during speech, recognition and processing never restarts the mic', async () => {
+    for (const phase of ['speech', 'recognition', 'processing'] as const) {
+      const t = await started();
+      if (phase === 'processing') {
+        t.deps.handleTurn.mockImplementationOnce(() => new Promise<void>(() => undefined));
+        t.lastListen().onFinal('Question');
+        await t.flush();
+        expect(t.engine.state).toBe('processing');
+      }
+      if (phase === 'speech') {
+        t.deps.handleTurn.mockImplementationOnce(async () => t.engine.say('Answer', 'reply'));
+        t.lastListen().onFinal('Question');
+        await t.flush();
+        t.spoken[t.spoken.length - 1].onStart();
+      }
+      const count = t.listens.length;
+      t.engine.stop('user');
+      t.spoken[t.spoken.length - 1]?.onEnd();
+      t.advance(60_000);
+      expect(t.listens.length).toBe(count);
+      expect(t.engine.active).toBe(false);
+      if (phase === 'processing') expect(t.deps.cancelPending).toHaveBeenCalled();
+    }
+  });
+
+  it('repeated start and stop never opens two microphone sessions at once', async () => {
+    const t = setup();
+    for (let i = 0; i < 3; i++) {
+      await t.engine.start('Welcome');
+      t.finishSpeech();
+      t.advance(CONVERSATION_LIMITS.afterSpeechDelayMs);
+      t.engine.stop('user');
+    }
+    expect(t.listens.length).toBe(3);
+    t.aborts.forEach((a) => expect(a).toHaveBeenCalled());
+  });
+
+  it('defers an automatic description while the user may be talking and drops it once they speak', async () => {
+    const t = await started();
+    const spokenBefore = t.spoken.length;
+    t.engine.say('A chair on the left.', 'auto');
+    expect(t.spoken.length).toBe(spokenBefore);
+    expect(t.engine.state).toBe('listening');
+    t.deps.handleTurn.mockImplementationOnce(async () => t.engine.say('Your answer.', 'reply'));
+    t.lastListen().onFinal('Where is the door?');
+    await t.flush();
+    expect(t.spoken[t.spoken.length - 1].text).toBe('Your answer.');
+    t.finishSpeech();
+    t.advance(CONVERSATION_LIMITS.afterSpeechDelayMs);
+    expect(t.spoken.some((s) => s.text === 'A chair on the left.')).toBe(false);
+  });
+
+  it('speaks a fresh deferred description between silent rounds', async () => {
+    const t = await started();
+    t.engine.say('A chair on the left.', 'auto');
+    t.advance(2000);
+    t.lastListen().onEnd();
+    expect(t.spoken[t.spoken.length - 1].text).toBe('A chair on the left.');
+  });
+
+  it('drops automatic descriptions while a user question is being answered', async () => {
+    const t = await started();
+    t.deps.handleTurn.mockImplementationOnce(() => new Promise<void>(() => undefined));
+    t.lastListen().onFinal('What is that?');
+    await t.flush();
+    const count = t.spoken.length;
+    t.engine.say('Auto scene text', 'auto');
+    expect(t.spoken.length).toBe(count);
   });
 
   it('the Talk button stops speech, cancels the pending answer and never speaks the stale reply', async () => {

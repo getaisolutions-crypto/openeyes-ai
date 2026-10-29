@@ -273,7 +273,10 @@ export function useLiveExplore() {
     controllerRef.current = controller;
     controller.start();
     addEntry({ speaker: 'notice', text: `Live Explore started. Mode: ${MODE_LABELS[s.exploreMode]}.` });
-    say(START_MESSAGES[s.exploreMode], 'status');
+    say(
+      routerRef.current && s.exploreMode === 'ask' ? 'Camera on. Live Explore started. Ask me anything about what is in view.' : START_MESSAGES[s.exploreMode],
+      'status',
+    );
   }, [addEntry, announce, camera, captureFrame, say, silence, stopStream, vision]);
 
   // Attach the stream once the video element is on screen.
@@ -355,6 +358,7 @@ export function useLiveExplore() {
         return;
       }
       silence();
+      const wasConversation = conversationRef.current;
       conversationRef.current = true;
       setBusyLabel(label);
       announce(`${label}.`);
@@ -372,7 +376,7 @@ export function useLiveExplore() {
         say(message, 'reply');
       } finally {
         turnSignal?.removeEventListener('abort', onTurnAbort);
-        conversationRef.current = false;
+        conversationRef.current = wasConversation;
         setBusyLabel(null);
       }
     },

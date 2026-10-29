@@ -14,6 +14,7 @@ import { VoiceSelect } from '../components/VoiceSelect';
 import { META_MODELS } from '../services/ai/metaModels';
 import { MetaConnectionCheck } from '../components/MetaConnectionCheck';
 import { AppUpdatesPanel } from '../components/AppUpdatesPanel';
+import { VoiceDiagnosticsPanel } from '../components/VoiceDiagnosticsPanel';
 import { clearAllAppData } from '../utils/storage';
 import type {
   AssistanceMode,
@@ -154,8 +155,10 @@ export default function SettingsPage() {
         <div className="py-3">
           <Notice variant="info" title="How the microphone is used">
             The microphone is only used after you press Start Voice Conversation on the Explore screen, and it turns off when
-            you stop, leave the screen or switch apps. It is off while OpenEyes speaks. OpenEyes never records or saves audio.
-            The recognized words are sent to Meta AI through the OpenEyes server to get a reply.
+            you stop, leave the screen or switch apps. It is off while OpenEyes speaks unless Interrupt by voice is on. With
+            hands-free turns, OpenEyes keeps listening again after every reply, and silence does not end the conversation.
+            OpenEyes never records or saves audio. The recognized words are sent to Meta AI through the OpenEyes server to get a reply.
+            Replies are spoken by your device voice; Meta Voice only turns speech into text.
           </Notice>
         </div>
         <OptionGroup<SpeechRecognitionChoice>
@@ -169,14 +172,15 @@ export default function SettingsPage() {
             {
               value: 'meta',
               label: 'Meta Voice',
-              description: 'Audio is streamed through the OpenEyes server to Meta Voice Transcribe while listening. Falls back to the browser if unavailable.',
+              description:
+                'Muse Voice Transcribe, speech-to-text via the OpenEyes server. While listening, audio is streamed there and turned into text. If it is unavailable, the browser listens instead and you are told.',
             },
-            { value: 'browser', label: 'Browser', description: "Your browser's own speech recognition." },
+            { value: 'browser', label: 'Browser', description: "Your browser's own speech recognition. In Chrome this usually runs on Google's servers." },
           ]}
         />
         <Switch
           label="Hands-free turns"
-          description="After each reply, listen again by itself. Turn off to tap Talk before every question."
+          description="After each reply, listen again by itself, until you say stop conversation or tap Stop. If the microphone keeps failing, hands-free pauses and Talk turns it back on. Turn off to tap Talk before every question."
           checked={settings.conversationHandsFree}
           onChange={(v) => set('conversationHandsFree', v, `Hands-free turns ${v ? 'on' : 'off'}.`)}
         />
@@ -378,9 +382,31 @@ export default function SettingsPage() {
           checked={settings.rememberConversation}
           onChange={(v) => set('rememberConversation', v, `Remember conversation ${v ? 'on' : 'off'}.`)}
         />
-        <div className="space-y-2 py-3 text-ink/90">
-          <p>In this version nothing you save, say or photograph is sent to OpenEyes or Meta servers.</p>
-          <p>Voice input uses your browser&apos;s speech service, which may process audio online depending on the browser.</p>
+        <div className="space-y-3 py-3 text-ink/90">
+          <p>
+            <strong>Kept on this device only:</strong> settings, memories, Trusted Circle contacts, and your Assistant conversation
+            if Remember conversation is on. These are never uploaded as a whole.
+          </p>
+          <p>
+            <strong>Sent to the OpenEyes server, then to Meta AI:</strong> your typed or recognized question; a shrunk camera frame
+            when you press Describe, Find, Read or send a photo, and selected frames while Live Explore runs; recent conversation
+            messages; and only the saved memories that match your question. The OpenEyes server passes these to Meta and does not
+            store them.
+          </p>
+          <p>
+            <strong>Microphone audio:</strong> sent only while a voice conversation is listening. With Meta Voice it streams through
+            the OpenEyes server to Meta Voice Transcribe. With browser recognition, your browser maker may process it. OpenEyes
+            never records or stores audio or transcripts on its server.
+          </p>
+          <p>
+            <strong>What the OpenEyes server keeps:</strong> for usage limits, a scrambled device identifier, request times and
+            voice session lengths, removed after 24 hours. Its logs contain error types and session lengths, not your words,
+            images or memories.
+          </p>
+          <p>
+            <strong>Meta:</strong> Meta processes what OpenEyes sends under its own terms. OpenEyes cannot promise how long Meta keeps
+            it.
+          </p>
         </div>
         <div className="py-3">
           <button type="button" className="btn-danger w-full" onClick={() => setConfirmWipe(true)}>
@@ -402,7 +428,8 @@ export default function SettingsPage() {
             through the OpenEyes server, and OpenEyes does not store it there.
           </p>
           <p>
-            <strong>Microphone:</strong> requested only when you start voice input, and used only while listening.
+            <strong>Microphone:</strong> requested only when you start voice input or a voice conversation, and used only while
+            listening. A voice conversation stops when you leave the screen or switch apps.
           </p>
           <p>To revoke access, open your browser&apos;s site settings or your phone&apos;s app permissions.</p>
         </div>
@@ -421,9 +448,14 @@ export default function SettingsPage() {
           ))}
         </ul>
         <p className="py-3 text-sm text-muted">
-          Muse Spark answers only when the OpenEyes server has a Meta API key. The other models are not connected yet.
+          Muse Spark and Muse Voice Transcribe answer only when the OpenEyes server has a Meta API key; use the connection check
+          below to see whether it is reachable now. Models marked Planned are not connected.
         </p>
         <MetaConnectionCheck />
+      </Section>
+
+      <Section title="Voice diagnostics" badge={<PlannedBadge label="Testing" />}>
+        <VoiceDiagnosticsPanel />
       </Section>
 
       <Section title="App & updates">

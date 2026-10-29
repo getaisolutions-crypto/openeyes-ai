@@ -20,6 +20,22 @@ import {
   type FallbackEvent,
   type RecognizerWithFallback,
 } from '../services/voice/recognizerFallback';
+import type { MicrophonePermission } from '../services/voice/voiceConversationEngine';
+import {
+  EMPTY_DIAGNOSTICS,
+  applyDiagnostic,
+  writeDiagnostics,
+  type VoiceDiagnosticsSnapshot,
+} from '../services/voice/voiceDiagnostics';
+
+async function queryMicrophonePermission(): Promise<MicrophonePermission> {
+  try {
+    const status = await navigator.permissions?.query({ name: 'microphone' as PermissionName });
+    return status ? (status.state as MicrophonePermission) : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
 
 export const VOICE_SESSION_MAX_MINUTES = 15;
 
@@ -92,6 +108,13 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
   const engineRef = useRef<VoiceConversationEngine | null>(null);
   const recognizerRef = useRef<RecognizerWithFallback | null>(null);
   const [recognizerId, setRecognizerId] = useState<SpeechRecognizer['id']>('browser');
+  const diagnosticsRef = useRef<VoiceDiagnosticsSnapshot>(EMPTY_DIAGNOSTICS);
+
+  const recordDiagnostics = useCallback((update: (s: VoiceDiagnosticsSnapshot) => VoiceDiagnosticsSnapshot) => {
+    const next = update(diagnosticsRef.current);
+    diagnosticsRef.current = { ...next, cameraOn: optionsRef.current.isExploring() };
+    writeDiagnostics(diagnosticsRef.current);
+  }, []);
 
   const buildRecognizer = useCallback(() => {
     const browser = browserRecognizer(voice);
@@ -99,6 +122,11 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
     const recognizer = wantsMeta
       ? createRecognizerWithFallback(metaVoice, browser.isSupported() ? browser : null, (event, active) => {
           setRecognizerId(active);
+          recordDiagnostics((s) => ({
+            ...s,
+            activeProvider: active,
+            lastProviderFailure: event === 'session' ? 'Meta Voice unavailable, browser used for the session' : 'Meta Voice unavailable for one turn',
+          }));
           const message = FALLBACK_MESSAGES[event];
           optionsRef.current.addNotice(message);
           announce(message);
@@ -106,8 +134,9 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
       : createRecognizerWithFallback(browser, null, () => undefined);
     recognizerRef.current = recognizer;
     setRecognizerId(recognizer.activeId);
+    recordDiagnostics((s) => ({ ...s, selectedProvider: settingsRef.current.speechRecognition, activeProvider: recognizer.activeId }));
     return recognizer;
-  }, [announce, metaVoice, voice]);
+  }, [announce, metaVoice, recordDiagnostics, voice]);
 
   const getEngine = useCallback((): VoiceConversationEngine => {
     if (engineRef.current) return engineRef.current;
@@ -117,6 +146,11 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
           isSupported: () => (recognizerRef.current ?? buildRecognizer()).isSupported(),
           requestMicrophone: () => voice.requestMicrophone(),
           startListening: (handlers) => (recognizerRef.current ?? buildRecognizer()).startListening(handlers),
+          checkPermission: async () => {
+            const permission = await queryMicrophonePermission();
+            recordDiagnostics((s) => ({ ...s, microphonePermission: permission }));
+            return permission;
+          },
         },
         output: {
           speak: (text, { onStart, onEnd }) => {
@@ -153,11 +187,16 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
           const message =
             kind === 'stopped-listening'
               ? 'I stopped listening because I did not hear anything. Tap Talk when you want to speak.'
-              : `${error && error !== 'no-speech' ? `${SPEECH_ERROR_MESSAGES[error]} ` : ''}Hands-free listening is not working well here, so tap Talk each time you want to speak.`;
+              : `${error && error !== 'no-speech' ? `${SPEECH_ERROR_MESSAGES[error]} ` : ''}Hands-free listening paused because the microphone kept failing. Tap Talk to turn it back on.`;
           optionsRef.current.addNotice(message);
           return message;
         },
-        onMetrics: setMetrics,
+        onMetrics: (m) => {
+          setMetrics(m);
+          const { turnId: _turnId, ...lastTurn } = m;
+          recordDiagnostics((s) => ({ ...s, lastTurn }));
+        },
+        onDiagnostic: (event) => recordDiagnostics((s) => applyDiagnostic(s, event)),
         onEnd: (reason) => {
           const o = optionsRef.current;
           o.setSpeechRouter(null);
@@ -174,7 +213,7 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
     );
     engineRef.current = engine;
     return engine;
-  }, [announce, buildRecognizer, voice]);
+  }, [announce, buildRecognizer, recordDiagnostics, voice]);
 
   useEffect(() => {
     engineRef.current?.setConfig(engineConfig(settings));
@@ -202,9 +241,11 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
     const engine = getEngine();
     if (engine.active) return;
     setMetrics(null);
+    diagnosticsRef.current = EMPTY_DIAGNOSTICS;
     const s = settingsRef.current;
     engine.setConfig(engineConfig(s));
     const recognizer = buildRecognizer();
+    void queryMicrophonePermission().then((permission) => recordDiagnostics((d) => ({ ...d, microphonePermission: permission })));
     if (s.speechRecognition === 'meta' && recognizer.activeId === 'browser') {
       optionsRef.current.addNotice('Meta voice is not available here, so the browser will listen.');
     }
@@ -218,7 +259,7 @@ export function useVoiceConversation(options: VoiceConversationOptions) {
     parts.push('Say stop conversation to end.');
     const started = await engine.start(parts.join(' '));
     if (started) optionsRef.current.addNotice('Voice conversation started. Microphone on.');
-  }, [buildRecognizer, getEngine]);
+  }, [buildRecognizer, getEngine, recordDiagnostics]);
 
   const stop = useCallback(() => engineRef.current?.stop('user'), []);
   const interrupt = useCallback(() => engineRef.current?.interrupt(), []);

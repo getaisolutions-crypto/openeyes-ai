@@ -35,8 +35,8 @@ export const META_MODELS: MetaModelInfo[] = [
   {
     id: 'muse-voice-transcribe',
     name: 'Muse Voice Transcribe',
-    use: 'Speech-to-text for voice input, replacing the browser speech service.',
+    use: 'Speech-to-text via the OpenEyes server during a voice conversation when Meta Voice is selected. Replies are still spoken by your device voice.',
     capabilities: ['speech-to-text'],
-    status: 'planned',
+    status: 'integrated',
   },
 ];

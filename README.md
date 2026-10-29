@@ -637,6 +637,33 @@ was not confirmed. Positions are described in words only.
 - The existing microphone, Meta Voice relay, browser fallback and speech output are reused. User answers interrupt;
   errors are spoken; automatic descriptions and scene announcements never interrupt speech or a voice conversation.
 
+## Voice system repair (v0.5.1)
+
+Root causes found by code inspection (not reproduced on a device):
+
+- Hands-free: the engine counted every silent listening round and switched to tap-to-talk after a few, so a pause
+  of a few seconds ended hands-free. Two recognition errors in a row also parked it, and a missing speech end event
+  left the microphone off forever.
+- Live Explore: answering a typed or spoken question cleared the "voice conversation active" flag, so automatic
+  descriptions were spoken over the conversation and stopped the microphone. Automatic descriptions that arrived
+  while listening also cut the listening round.
+
+Fixes (`voiceConversationEngine.ts`, `useVoiceConversation.ts`, `useLiveExplore.ts`):
+
+- Silence never ends hands-free. Only 8 rounds in a row that end in under 1 second, or 4 recognition errors in a
+  row (with backoff up to 4 s), pause it; tapping Talk turns it back on.
+- A "permission denied" error is re-checked with the browser permission API before the session ends.
+- Every spoken reply has a deadline (length-based plus 10 s); if the speech end never arrives, speech is stopped
+  and listening resumes. A late end event is ignored.
+- Automatic Live Explore descriptions are held while listening and spoken between silent rounds if still under 20 s
+  old; they are dropped when the user speaks or while a question is being answered. The camera stays on.
+- Privacy-safe diagnostics (states, error categories, counts, timings; never words, audio or images) are kept for the
+  current tab only and shown in Settings > Voice diagnostics with a Copy report button.
+- Settings: Muse Voice Transcribe is labelled "Via OpenEyes server" (speech-to-text only; replies use the device
+  voice). The privacy section now separates device storage, server processing and Meta processing.
+
+Not verified on real Android hardware. Leaving the app or locking the screen still ends the conversation on purpose.
+
 ## Placeholders (not functional yet)
 
 - **SAM 3.1 segmentation** (exact object outlines). Find uses Muse Spark's description of position instead.
@@ -706,6 +733,9 @@ Manual testing with TalkBack and VoiceOver on physical devices is still required
 - `.env` is git-ignored. Do not commit secrets or personal data.
 
 ## Test results
+
+v0.5.1 (voice repair): `npm run typecheck` passes, `npm test` 376 tests passing in 26 files, `npm run build` succeeds.
+New tests in `voiceConversationEngine.test.ts`, `voiceRepair.test.tsx` and `liveExploreScreen.test.tsx`. All mocked.
 
 v0.5.0 (Phases 5-7): `npm run typecheck` passes, `npm test` **360 tests passing in 25 files**, `npm run build`
 succeeds. New test files: `advancedFind`, `advancedRead`, `advancedMemory`, `taskSessions`, `environmentalAwareness`,
