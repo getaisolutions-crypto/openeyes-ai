@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
-import { DEFAULT_MODEL, handleRequest } from "./core.ts";
+import { DEFAULT_MODEL, FIND_MODEL, handleRequest } from "./core.ts";
 
 // Live Explore sends at most one frame every 8 seconds (75 per 10 minutes), plus questions.
 const QUOTA_LIMIT = 90;
@@ -13,6 +13,7 @@ Deno.serve((req: Request) =>
   handleRequest(req, {
     apiKey: Deno.env.get("MODEL_API_KEY") || undefined,
     model: Deno.env.get("META_MODEL_ID") || DEFAULT_MODEL,
+    findModel: Deno.env.get("OPENEYES_FIND_ENGINE") === "vision" ? undefined : FIND_MODEL,
     fetchImpl: fetch,
     consumeQuota: async (clientHash) => {
       const { data, error } = await supabase.rpc("consume_ai_quota", {
