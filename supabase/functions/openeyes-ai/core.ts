@@ -2,6 +2,7 @@
 
 export const META_API_BASE_URL = "https://api.meta.ai/v1";
 export const DEFAULT_MODEL = "muse-spark-1.3";
+export const FIND_MODEL = "sam-3.1";
 export const META_TIMEOUT_MS = 45_000;
 
 export const LIMITS = {
@@ -101,6 +102,8 @@ export interface HandlerDeps {
   consumeQuota: (clientHash: string) => Promise<boolean>;
   now?: () => Date;
   timeoutMs?: number;
+  /** Explicit rollback switch; deployed entry point enables SAM. */
+  findModel?: string;
 }
 
 class HttpError extends Error {
@@ -385,12 +388,15 @@ Reply with only a JSON object, no other text, in this exact shape:
         {
           role: "system",
           content: `${SAFETY_RULES}
-You compare a new camera image with a previous summary for a blind user.
+You describe the current camera view naturally to a blind person, as a helpful person beside them would.
+${length} Start directly with the scene. Do not say "the image shows", "I can see", or announce that you are analysing.
+Mention only the main things and useful camera-relative positions. Do not list every object, decorative detail, colour, lighting change or repeated background feature.
+Give uncertainty only when it matters. Do not append generic reminders or advice to every description.
 Reply with only a JSON object, no other text, in this exact shape:
 {"summary":"...","objects":["..."],"changes":[{"category":"person"|"door"|"stairs"|"new_area"|"object"|"other","text":"..."}],"confidence":"high"|"medium"|"low"}
-- "summary": one short sentence about what the current image shows.
+- "summary": ${req.responseLength === "brief" ? "one or two short spoken sentences, at most 45 words" : "up to four short spoken sentences, at most 85 words"} about the current view. Example: "A table is ahead, with a mug on its left. A doorway is on the right."
 - "objects": up to 8 main visible things, a few words each.
-- "changes": only differences clearly supported by the image, written as what the current image shows, for example "The current image shows a person near the doorway." Use "new_area" when the camera seems to point somewhere else. Do not describe the camera moving as objects moving. Never mention speed, direction of travel or what will happen next. Empty list if nothing meaningful changed or there is no previous summary.
+- "changes": at most two meaningful differences clearly supported by the image, spoken directly, for example "A person is near the doorway." Use "new_area" when looking at a different place. Ignore exposure shifts, camera shake, small framing differences and cosmetic changes. Do not describe the camera moving as objects moving. Never infer speed, direction of travel or what will happen next. Empty list if nothing meaningful changed or there is no previous summary.
 - Never say a path is clear or safe, never say there are no obstacles, never give movement instructions.`,
         },
         { role: "user", content: [{ type: "text", text: previous }, imagePart(req.image!.dataUrl)] },
@@ -449,7 +455,72 @@ export function parseFindResult(content: string): FindResult {
   const confidence = (["high", "medium", "low"] as const).find((c) => c === parsed.confidence) ?? "low";
   const position = visibility === "not_visible" || typeof parsed.position !== "string" ? "" : clean(parsed.position, 400);
   const suggestion = typeof parsed.suggestion === "string" ? clean(parsed.suggestion, 400) : "";
-  return { visibility, position, confidence, suggestion };
+  return { visibility: visibility === "visible" && confidence !== "high" ? "uncertain" : visibility, position, confidence, suggestion };
+}
+
+export interface DetectionBox { x1: number; y1: number; x2: number; y2: number; w: number; h: number; confidence: number }
+
+/** SAM pixel coordinates are used only for camera-relative location, never distance or reachability. */
+export function parseSamDetections(text: string): DetectionBox[] {
+  if (!text.trim()) return [];
+  const line = text.trim();
+  if (!line.startsWith("<0f>")) throw new HttpError(502, "meta_bad_response", "Invalid detection frame.");
+  const boxes: DetectionBox[] = [];
+  const record = /(?:^|,)\d+<\|box;([^|]+)\|><\|mask;[\s\S]*?\|>/g;
+  const records = line.slice(4);
+  let end = 0;
+  for (const match of records.matchAll(record)) {
+    if (match.index !== end || boxes.length >= 128) throw new HttpError(502, "meta_bad_response", "Invalid detection record.");
+    end = match.index + match[0].length;
+    const fields = Object.fromEntries(match[1].split(";").map((part) => part.split("=")));
+    const values = ["x1", "y1", "x2", "y2", "w", "h"].map((key) => Number(fields[key]));
+    const [x1, y1, x2, y2, w, h] = values;
+    const confidence = fields.c === undefined ? 0 : Number(fields.c);
+    if (values.some((v) => !Number.isSafeInteger(v) || v < 0) || w < 1 || h < 1 ||
+        x2 < x1 || y2 < y1 || x2 >= w || y2 >= h || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+      throw new HttpError(502, "meta_bad_response", "Invalid detection coordinates.");
+    }
+    boxes.push({ x1, y1, x2, y2, w, h, confidence });
+  }
+  if (!boxes.length || end !== records.length) throw new HttpError(502, "meta_bad_response", "Incomplete detection result.");
+  return boxes;
+}
+
+export function detectionResult(boxes: DetectionBox[]): FindResult {
+  if (!boxes.length) return { visibility: "not_visible", position: "", confidence: "low", suggestion: "Look around slowly." };
+  const best = [...boxes].sort((a, b) => b.confidence - a.confidence)[0];
+  const cx = (best.x1 + best.x2) / (2 * best.w), cy = (best.y1 + best.y2) / (2 * best.h);
+  const horizontal = cx < 0.35 ? "left" : cx > 0.65 ? "right" : "centre";
+  const vertical = cy < 0.35 ? "upper" : cy > 0.65 ? "lower" : "middle";
+  // Conservative operating threshold; this is not a calibrated probability of correctness.
+  const confident = best.confidence >= 0.85;
+  return { visibility: confident ? "visible" : "uncertain", confidence: confident ? "high" : "low",
+    position: `${boxes.length > 1 ? "one matching object " : ""}in the ${vertical} ${horizontal} of your view`, suggestion: "" };
+}
+
+async function findWithSam(req: ValidRequest, deps: HandlerDeps): Promise<FindResult> {
+  const body = {
+    model: deps.findModel, stream: false,
+    metadata: { include_confidence: "true", mask_encoding: "one_bit" },
+    input: [{ type: "message", role: "user", content: [
+      { type: "input_text", text: req.objectName },
+      { type: "input_image", image_url: req.image!.dataUrl },
+    ] }],
+  };
+  const response = await fetchMetaJson("/responses", body, { apiKey: deps.apiKey!, fetchImpl: deps.fetchImpl, timeoutMs: deps.timeoutMs ?? 12_000 });
+  if (response.status !== "completed" || !Array.isArray(response.output)) {
+    throw new HttpError(502, "meta_bad_response", "Object detection did not complete.");
+  }
+  const parts = response.output.flatMap((item: { type?: string; content?: { type?: string; text?: string }[] }) =>
+    item.type === "message" && Array.isArray(item.content) ? item.content : []);
+  if (parts.some((part: { type?: string }) => part.type !== "output_text")) {
+    throw new HttpError(502, "meta_bad_response", "Object detection did not return geometry.");
+  }
+  const text = parts.map((part: { text?: string }) => {
+    if (typeof part.text !== "string") throw new HttpError(502, "meta_bad_response", "Invalid detection text.");
+    return part.text;
+  }).join("");
+  return detectionResult(parseSamDetections(text));
 }
 
 function parseJsonObject(content: string): Record<string, unknown> {
@@ -533,23 +604,26 @@ export async function callMeta(
   body: unknown,
   { apiKey, fetchImpl, timeoutMs = META_TIMEOUT_MS }: { apiKey: string; fetchImpl: typeof fetch; timeoutMs?: number },
 ): Promise<{ content: string; model: string }> {
+  const json = await fetchMetaJson("/chat/completions", body, { apiKey, fetchImpl, timeoutMs });
+  const content = extractContent(json);
+  if (!content) throw new HttpError(502, "meta_bad_response", "Meta AI returned an empty answer.");
+  return { content, model: typeof json.model === "string" ? json.model : "" };
+}
+
+async function fetchMetaJson(
+  path: string, body: unknown,
+  { apiKey, fetchImpl, timeoutMs = META_TIMEOUT_MS }: { apiKey: string; fetchImpl: typeof fetch; timeoutMs?: number },
+): Promise<Record<string, unknown>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
   try {
-    response = await fetchImpl(`${META_API_BASE_URL}/chat/completions`, {
+    response = await fetchImpl(`${META_API_BASE_URL}${path}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-  } catch {
-    if (controller.signal.aborted) throw new HttpError(504, "meta_timeout", "Meta AI took too long to answer.");
-    throw new HttpError(502, "meta_unreachable", "Meta AI could not be reached.");
-  } finally {
-    clearTimeout(timer);
-  }
-
   if (response.status === 401 || response.status === 403) {
     throw new HttpError(502, "meta_auth_failed", "The Meta API key was rejected.");
   }
@@ -568,10 +642,15 @@ export async function callMeta(
   } catch {
     throw new HttpError(502, "meta_bad_response", "The AI answer could not be understood.");
   }
-  const content = extractContent(json);
-  if (!content) throw new HttpError(502, "meta_bad_response", "Meta AI returned an empty answer.");
-  const model = typeof (json as { model?: unknown }).model === "string" ? (json as { model: string }).model : "";
-  return { content, model };
+  if (!json || typeof json !== "object" || Array.isArray(json)) throw new HttpError(502, "meta_bad_response", "Invalid model response.");
+  return json as Record<string, unknown>;
+  } catch (error) {
+    if (controller.signal.aborted) throw new HttpError(504, "meta_timeout", "Meta AI took too long to answer.");
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(502, "meta_unreachable", "Meta AI could not be reached.");
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function sha256(value: string): Promise<string> {
@@ -618,6 +697,11 @@ export async function handleRequest(req: Request, deps: HandlerDeps): Promise<Re
       throw new HttpError(503, "quota_unavailable", "OpenEyes could not check its usage limit.");
     }
     if (!allowed) throw new HttpError(429, "quota_exceeded", "Too many requests. Please wait a few minutes.", 60);
+
+    if (valid.task === "find" && deps.findModel) {
+      const find = await findWithSam(valid, deps);
+      return json(200, { task: "find", model: deps.findModel, find });
+    }
 
     const now = deps.now?.() ?? new Date();
     const metaBody = buildMetaRequest(valid, deps.model, now);
