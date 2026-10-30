@@ -1,3 +1,4 @@
+// Deployment revision: accessible-live-20261030.
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { DEFAULT_MODEL, FIND_MODEL, handleRequest } from "./core.ts";
 
